@@ -9,9 +9,12 @@ import asyncio
 
 from app.activities import SQLMetadataExtractionActivities
 from app.clients import SQLClient
-from app.workflows import SQLMetadataExtractionWorkflow
+from app.handlers import PostgresHandler
 from application_sdk.application.metadata_extraction.sql import (
     BaseSQLMetadataExtractionApplication,
+)
+from application_sdk.workflows.metadata_extraction.sql import (
+    BaseSQLMetadataExtractionWorkflow,
 )
 from application_sdk.common.error_codes import ApiError
 from application_sdk.observability.decorators.observability_decorator import (
@@ -33,12 +36,13 @@ async def main():
         application = BaseSQLMetadataExtractionApplication(
             name="postgres",
             client_class=SQLClient,
+            handler_class=PostgresHandler,
         )
 
         # Register our workflow and activities with the worker
         await application.setup_workflow(
             workflow_and_activities_classes=[
-                (SQLMetadataExtractionWorkflow, SQLMetadataExtractionActivities)
+                (BaseSQLMetadataExtractionWorkflow, SQLMetadataExtractionActivities)
             ],
         )
 
@@ -47,7 +51,7 @@ async def main():
 
         # Setup and start the FastAPI server with our workflow
         await application.setup_server(
-            workflow_class=SQLMetadataExtractionWorkflow,
+            workflow_class=BaseSQLMetadataExtractionWorkflow,
         )
         await application.start_server()
 
@@ -58,4 +62,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-
