@@ -24,6 +24,7 @@ from application_sdk.observability.decorators.observability_decorator import (
 from application_sdk.observability.logger_adaptor import get_logger
 from application_sdk.observability.metrics_adaptor import get_metrics
 from application_sdk.observability.traces_adaptor import get_traces
+import os
 
 logger = get_logger(__name__)
 metrics = get_metrics()
@@ -40,6 +41,11 @@ async def main():
             handler_class=PostgresHandler,
         )
 
+        ui_index_path = os.path.abspath("frontend/static/index.html")
+        logger.info(
+            f"UI static index exists: {os.path.exists(ui_index_path)} at {ui_index_path}"
+        )
+
         # Register our workflow and activities with the worker
         await application.setup_workflow(
             workflow_and_activities_classes=[
@@ -53,6 +59,7 @@ async def main():
         # Setup and start the FastAPI server with our workflow
         await application.setup_server(
             workflow_class=SQLMetadataExtractionWorkflow,
+            has_configmap=True,
         )
         await application.start_server()
 
