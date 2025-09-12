@@ -113,6 +113,8 @@ function buildDBBlock(type, name, schemas){
       }
       handleSchemaSelection(type, name, schema, e.target.checked);
       updateSelectionCount(type, name, schemas.size);
+      // Disable/enable the opposite checkbox to reflect state
+      syncOppositeSchemaCheckbox(opposite, name, schema, e.target.checked);
     });
   });
 
@@ -134,14 +136,51 @@ function buildDBBlock(type, name, schemas){
       });
       handleDatabaseSelection(type, name, allowed, true);
       updateSelectionCount(type, name, schemas.size);
+      // Reflect in opposite dropdown: disable allowed schemas there
+      allowed.forEach(s => syncOppositeSchemaCheckbox(opposite, name, s, true));
     } else {
       schemaList.querySelectorAll('input[type="checkbox"]').forEach(cb=>cb.checked=false);
       handleDatabaseSelection(type, name, Array.from(schemas), false);
       updateSelectionCount(type, name, schemas.size);
+      // Re-enable opposite checkboxes
+      Array.from(schemas).forEach(s => syncOppositeSchemaCheckbox(opposite, name, s, false));
     }
   });
 
   dbDiv.addEventListener('click', e => { if (e.target.type !== 'checkbox') schemaList.classList.toggle('show'); });
+}
+
+// Locate schema checkbox in the opposite dropdown and toggle disabled/title
+function syncOppositeSchemaCheckbox(opposite, dbName, schemaName, disable){
+  const dd = document.getElementById(`${opposite}Metadata`);
+  if (!dd) return;
+  const content = dd.querySelector('.dropdown-content');
+  if (!content) return;
+  let dbNode = null;
+  // Find the DB header node with database-checkbox
+  const items = Array.from(content.children || []);
+  for (let i=0; i<items.length; i++){
+    const node = items[i];
+    const dbCb = node.querySelector && node.querySelector('input.database-checkbox');
+    const dbLabel = node.querySelector && node.querySelector('label');
+    if (dbCb && dbLabel && dbLabel.textContent === dbName) {
+      dbNode = node;
+      break;
+    }
+  }
+  if (!dbNode) return;
+  const schemaList = dbNode.nextElementSibling;
+  if (!schemaList) return;
+  const schemaItems = Array.from(schemaList.children || []);
+  for (const it of schemaItems){
+    const label = it.querySelector && it.querySelector('label');
+    const cb = it.querySelector && it.querySelector('input[type="checkbox"]');
+    if (label && cb && label.textContent === schemaName){
+      cb.disabled = !!disable;
+      cb.title = disable ? `Selected in ${opposite === 'include' ? 'exclude' : 'include'} section` : '';
+      break;
+    }
+  }
 }
 
 async function populateMetadataDropdowns(){ const includeDD=document.getElementById('includeMetadata'); const excludeDD=document.getElementById('excludeMetadata'); includeDD.querySelector('.dropdown-content').innerHTML=''; excludeDD.querySelector('.dropdown-content').innerHTML=''; const dbs=await fetchMetadata(); dbs.forEach((schemas,db)=>{ buildDBBlock('include',db,schemas); buildDBBlock('exclude',db,schemas);}); document.getElementById('page3-nav').style.display='flex'; }
