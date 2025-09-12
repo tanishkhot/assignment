@@ -4,7 +4,7 @@ Reuses the SDK's BaseSQLMetadataExtractionActivities and pins our
 local SQLClient so queries run against Postgres using psycopg.
 """
 
-from typing import Optional, Type
+from typing import Type
 
 from application_sdk.activities.metadata_extraction.sql import (
     BaseSQLMetadataExtractionActivities,
@@ -22,11 +22,6 @@ class SQLMetadataExtractionActivities(BaseSQLMetadataExtractionActivities):
     # Ensure our client is used by default
     sql_client_class: Type[SQLClient] = SQLClient
 
-    def __init__(self, multidb: bool = False):
-        super().__init__(
-            sql_client_class=SQLClient,
-            handler_class=None,  # default BaseSQLHandler
-            transformer_class=None,  # default QueryBasedTransformer
-            multidb=multidb,
-        )
-
+    # Use the base class __init__; the SDK passes
+    # sql_client_class/handler_class/transformer_class when instantiating
+    # from BaseSQLMetadataExtractionApplication.setup_workflow.

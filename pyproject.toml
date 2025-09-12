@@ -28,8 +28,8 @@ dev = [
 ]
 
 [tool.poe.tasks]
-# Start Dapr (1.13.x) locally for dev. Ensure dapr is installed at the desired version.
-start-dapr = "dapr run --enable-api-logging --log-level debug --app-id app --app-port 3000 --dapr-http-port 3500 --dapr-grpc-port 50001 --dapr-http-max-request-size 1024 --resources-path components"
+# Start Dapr locally for dev (compatible with 1.13+)
+start-dapr = "dapr run --enable-api-logging --log-level debug --app-id app --app-port 3000 --dapr-http-port 3500 --dapr-grpc-port 50001 --resources-path components"
 
 # Temporal dev server
 start-temporal = "temporal server start-dev --db-filename ./temporal.db"
