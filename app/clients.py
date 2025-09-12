@@ -1,9 +1,27 @@
-"""Client skeleton for Postgres connector.
+"""Postgres SQL client implementation.
 
-Implementation to be added in a later step:
-- Subclass BaseSQLClient
-- Provide DB_CONFIG with SQLAlchemy URL template
+Defines the SQLAlchemy connection URL template and required fields
+for connecting to Postgres using psycopg.
 """
 
-# Placeholder only; implementation will be added in a later step.
+from application_sdk.clients.models import DatabaseConfig
+from application_sdk.clients.sql import BaseSQLClient
+
+
+class SQLClient(BaseSQLClient):
+    """SQL client for Postgres.
+
+    Uses psycopg (psycopg3) driver and the standard
+    username/password/host/port/database credential fields.
+    """
+
+    DB_CONFIG = DatabaseConfig(
+        template=(
+            "postgresql+psycopg://{username}:{password}@{host}:{port}/{database}"
+        ),
+        required=["username", "password", "host", "port", "database"],
+        # Optionally add defaults or parameter passthroughs here, e.g. sslmode
+        # defaults={"client_encoding": "utf8"},
+        # parameters=["sslmode"],
+    )
 
