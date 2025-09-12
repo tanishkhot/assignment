@@ -23,3 +23,19 @@ class SQLClient(BaseSQLClient):
         # Allow passing connection parameters like sslmode via credentials.extra
         parameters=["sslmode"],
     )
+
+    def add_connection_params(self, connection_string: str, source_connection_params: dict) -> str:  # type: ignore[override]
+        """Override to skip None/empty values when appending query params.
+
+        Prevents cases like sslmode=None which psycopg rejects.
+        """
+        for key, value in source_connection_params.items():
+            if value is None or str(value).strip().lower() == "none" or str(value).strip() == "":
+                continue
+            if "?" not in connection_string:
+                connection_string += "?"
+            else:
+                connection_string += "&"
+            connection_string += f"{key}={value}"
+
+        return connection_string
