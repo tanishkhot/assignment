@@ -11,6 +11,10 @@ dependencies = [
     "atlan-application-sdk[daft,sqlalchemy,workflows]>=0.1.1rc41",
     # Postgres driver
     "psycopg[binary]>=3.2.7",
+    # IAM auth helper deps used by SDK import paths
+    "boto3>=1.38.6",
+    # SDK observability imports pandas
+    "pandas>=2.2.3",
     # Task runner
     "poethepoet>=0.34.0",
 ]
@@ -80,4 +84,3 @@ packages = [
 [tool.uv.sources]
 # atlan-application-sdk = { path = "../application-sdk", editable = true }
 # atlan-application-sdk = { git = "https://github.com/atlanhq/application-sdk", rev = "349e45a1ee273315a4474f645332e2ef4c8569a9" }
-
