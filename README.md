@@ -55,3 +55,24 @@ temporal server start-dev
 
 Once these are in place, proceed to scaffolding the app.
 
+## Quick start (2 commands)
+
+From the `postgres/` folder:
+
+1) Start dependencies (Dapr sidecar + Temporal dev server):
+
+```bash
+uv run poe start-deps
+```
+
+2) Start the application server:
+
+```bash
+uv run main.py
+```
+
+Notes:
+- The app uses Dapr for object/state store via the components in `components/`.
+- Endpoints are under `http://localhost:3000/workflows/v1` (e.g., `/auth`, `/check`, `/start`).
+- Outputs land in `local/dapr/objectstore/...` and the human‑readable export is written to `output/<workflow_id>/output.txt`.
+
