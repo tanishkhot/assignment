@@ -21,7 +21,7 @@ async function testConnection(){
       const details=(data && (data.details||data.error||data.message))||'';
       let msg=data.message||'Connection failed';
       const lower=(details||'').toLowerCase();
-      if(lower.includes('password authentication failed')) msg='Wrong password';
+      if(lower.includes('password authentication failed')) msg='Wrong password/username';
       else if(lower.includes('role') && lower.includes('does not exist')) msg='User does not exist';
       else if(lower.includes('database') && lower.includes('does not exist')) msg='Database does not exist';
       throw new Error(msg);
@@ -49,6 +49,33 @@ function attachPasswordToggle(){
     toggle.textContent=isText?'Show':'Hide';
   });
 }
+
+// Parse a PostgreSQL connection URL and fill fields
+function parseConnUrl(){
+  const urlInput=document.getElementById('connUrl');
+  if(!urlInput) return;
+  const val=urlInput.value.trim();
+  if(!val) return;
+  let u;
+  try{ u=new URL(val); }
+  catch(e){ try{ u=new URL('postgresql://'+val); }catch(e2){ alert('Invalid URL'); return; } }
+  document.getElementById('host').value = u.hostname || '';
+  document.getElementById('port').value = u.port || '5432';
+  document.getElementById('username').value = decodeURIComponent(u.username||'');
+  document.getElementById('password').value = decodeURIComponent(u.password||'');
+  const db=(u.pathname||'').replace(/^\//,'');
+  if(db) document.getElementById('database').value = decodeURIComponent(db);
+  const ssl=u.searchParams.get('sslmode');
+  const sslSel=document.getElementById('sslmode');
+  const req=document.getElementById('requireSSL');
+  if(sslSel && ssl){ sslSel.value=ssl; if(req) req.checked=(ssl==='require'); }
+}
+
+// Attach parser
+document.addEventListener('DOMContentLoaded', ()=>{
+  const btn=document.getElementById('parseUrl');
+  if(btn) btn.addEventListener('click', parseConnUrl);
+});
 
 function toggleDropdown(id){ const dd=document.getElementById(id); const content=dd.querySelector('.dropdown-content'); document.querySelectorAll('.dropdown-content').forEach(c=>{ if(c!==content) c.classList.remove('show');}); content.classList.toggle('show'); event.stopPropagation(); }
 

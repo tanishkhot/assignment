@@ -20,8 +20,6 @@ class SQLClient(BaseSQLClient):
             "postgresql+psycopg://{username}:{password}@{host}:{port}/{database}"
         ),
         required=["username", "password", "host", "port", "database"],
-        # Optionally add defaults or parameter passthroughs here, e.g. sslmode
-        # defaults={"client_encoding": "utf8"},
-        # parameters=["sslmode"],
+        # Allow passing connection parameters like sslmode via credentials.extra
+        parameters=["sslmode"],
     )
-

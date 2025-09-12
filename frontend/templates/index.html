@@ -54,6 +54,13 @@
 
         <div class="form-container">
           <div id="page1" class="page active">
+            <div class="form-group">
+              <label>Connection URL (optional)</label>
+              <div style="display:flex; gap:8px; align-items:center;">
+                <input type="text" id="connUrl" placeholder="postgresql://user:pass@host:5432/db?sslmode=require" style="flex:1;">
+                <button type="button" id="parseUrl" class="btn btn-secondary">Parse URL</button>
+              </div>
+            </div>
             <div class="form-group horizontal">
               <div class="input-wrapper flex-grow">
                 <label>Host *</label>
@@ -77,6 +84,25 @@
                   <button type="button" id="togglePassword" class="btn btn-secondary" style="white-space:nowrap;">Show</button>
                 </div>
               </div>
+            </div>
+
+            <div class="form-group">
+              <label>
+                <input type="checkbox" id="requireSSL"> Require SSL (NeonDB)
+                <span class="help-icon" title="Many cloud Postgres providers (like Neon, RDS, Cloud SQL) require encrypted connections. Enable this to set sslmode=require so the driver negotiates TLS and avoids authentication or connection failures.">ℹ️</span>
+              </label>
+            </div>
+            <div class="form-group">
+              <label>SSL Mode <span class="help-icon" title="Controls TLS enforcement and verification. For Neon, use require. For stricter verification with custom CAs use verify-ca/verify-full.">ℹ️</span></label>
+              <select id="sslmode">
+                <option value="">(default)</option>
+                <option value="disable">disable</option>
+                <option value="allow">allow</option>
+                <option value="prefer">prefer</option>
+                <option value="require">require</option>
+                <option value="verify-ca">verify-ca</option>
+                <option value="verify-full">verify-full</option>
+              </select>
             </div>
 
             <div class="form-group">
