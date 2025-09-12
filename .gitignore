@@ -1,1 +1,11 @@
 .venv/
+.env
+local/
+temporal.db
+**/__pycache__/
+**/*.pyc
+.DS_Store
+dist/
+build/
+.pytest_cache/
+*.log
