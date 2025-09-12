@@ -18,7 +18,9 @@ class SQLMetadataExtractionWorkflow(BaseSQLMetadataExtractionWorkflow):
     @staticmethod
     def get_activities(activities: SQLMetadataExtractionActivities):
         base = list(BaseSQLMetadataExtractionWorkflow.get_activities(activities))
-        # Register the custom export activity so the worker knows about it
+        # Register custom activities so the worker knows about them
+        base.append(activities.fetch_relationships)
+        base.append(activities.transform_relationships)
         base.append(activities.write_text_output)
         return base
 
@@ -32,6 +34,22 @@ class SQLMetadataExtractionWorkflow(BaseSQLMetadataExtractionWorkflow):
             self.activities_cls.get_workflow_args,
             workflow_config,
             retry_policy=RetryPolicy(maximum_attempts=3, backoff_coefficient=2),
+            start_to_close_timeout=self.default_start_to_close_timeout,
+            heartbeat_timeout=self.default_heartbeat_timeout,
+        )
+        # Run relationship fetch + transform
+        retry_policy = RetryPolicy(maximum_attempts=3, backoff_coefficient=2)
+        await workflow.execute_activity_method(
+            self.activities_cls.fetch_relationships,
+            args=[workflow_args],
+            retry_policy=retry_policy,
+            start_to_close_timeout=self.default_start_to_close_timeout,
+            heartbeat_timeout=self.default_heartbeat_timeout,
+        )
+        await workflow.execute_activity_method(
+            self.activities_cls.transform_relationships,
+            args=[workflow_args],
+            retry_policy=retry_policy,
             start_to_close_timeout=self.default_start_to_close_timeout,
             heartbeat_timeout=self.default_heartbeat_timeout,
         )

@@ -86,11 +86,11 @@
           <div class="form-group">
             <label>
               <input type="checkbox" id="requireSSL"> Require SSL (NeonDB)
-              <span class="help-icon" title="Many cloud Postgres providers (like Neon, RDS, Cloud SQL) require encrypted connections. Enable this to set sslmode=require so the driver negotiates TLS and avoids authentication or connection failures.">ℹ️</span>
+              <span class="help-icon" title="">You need SSL for: Neon, AWS RDS, GCP Cloud SQL (and most cloud Postgres). This sets sslmode=require so the driver negotiates TLS and avoids authentication or connection failures. <br> If that did not work, uncheck the tickbox and move on.</span>
             </label>
           </div>
           <div class="form-group">
-            <label>SSL Mode <span class="help-icon" title="Controls TLS enforcement and verification. For Neon, use require. For stricter verification with custom CAs use verify-ca/verify-full.">ℹ️</span></label>
+            <label>SSL Mode <span class="help-icon" title="You need SSL for: Neon, AWS RDS, Cloud SQL. Use require for most cases; use verify-ca/verify-full when you must verify the server certificate with your own CA.">ℹ️</span></label>
             <select id="sslmode">
               <option value="">(default)</option>
               <option value="disable">disable</option>
