@@ -83,7 +83,66 @@ function processMetadataResponse(rows){ const db=new Map(); rows.forEach(it=>{ c
 
 async function fetchMetadata(){ const payload={ type:'all', authType: currentAuthType, host:document.getElementById('host').value, port:Number(document.getElementById('port').value), username:document.getElementById('username').value, password:document.getElementById('password').value, database:document.getElementById('database').value }; const res=await fetch('/workflows/v1/metadata',{method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)}); if(!res.ok) return new Map(); const data=await res.json(); return processMetadataResponse(data.data||[]); }
 
-function buildDBBlock(type, name, schemas){ const content=document.getElementById(`${type}Metadata`).querySelector('.dropdown-content'); const dbDiv=document.createElement('div'); dbDiv.className='database-item'; const checkbox=document.createElement('input'); checkbox.type='checkbox'; checkbox.className='database-checkbox'; const label=document.createElement('label'); label.textContent=name; const count=document.createElement('span'); count.className='selected-count'; count.textContent=`0/${schemas.size}`; dbDiv.appendChild(checkbox); dbDiv.appendChild(label); dbDiv.appendChild(count); const schemaList=document.createElement('div'); schemaList.className='schema-list'; schemas.forEach(schema=>{ const sd=document.createElement('div'); sd.className='database-item'; const scb=document.createElement('input'); scb.type='checkbox'; const sl=document.createElement('label'); sl.textContent=schema; sd.appendChild(scb); sd.appendChild(sl); schemaList.appendChild(sd); scb.addEventListener('change',e=>{ handleSchemaSelection(type,name,schema,e.target.checked); updateSelectionCount(type,name,schemas.size);});}); content.appendChild(dbDiv); content.appendChild(schemaList); checkbox.addEventListener('change',e=>{ handleDatabaseSelection(type,name,Array.from(schemas),e.target.checked); schemaList.querySelectorAll('input[type="checkbox"]').forEach(cb=>cb.checked=e.target.checked); updateSelectionCount(type,name,schemas.size);}); dbDiv.addEventListener('click',e=>{ if(e.target.type!=='checkbox') schemaList.classList.toggle('show');}); }
+function buildDBBlock(type, name, schemas){
+  const content=document.getElementById(`${type}Metadata`).querySelector('.dropdown-content');
+  const dbDiv=document.createElement('div'); dbDiv.className='database-item';
+  const checkbox=document.createElement('input'); checkbox.type='checkbox'; checkbox.className='database-checkbox';
+  const label=document.createElement('label'); label.textContent=name;
+  const count=document.createElement('span'); count.className='selected-count'; count.textContent=`0/${schemas.size}`;
+  dbDiv.appendChild(checkbox); dbDiv.appendChild(label); dbDiv.appendChild(count);
+
+  const schemaList=document.createElement('div'); schemaList.className='schema-list';
+  const opposite = (type === 'include') ? 'exclude' : 'include';
+
+  // Build schema-level checkboxes with cross-validation
+  schemas.forEach(schema=>{
+    const sd=document.createElement('div'); sd.className='database-item';
+    const scb=document.createElement('input'); scb.type='checkbox';
+    const sl=document.createElement('label'); sl.textContent=schema;
+    sd.appendChild(scb); sd.appendChild(sl);
+    schemaList.appendChild(sd);
+
+    scb.addEventListener('change', e => {
+      if (e.target.checked) {
+        const oppSet = metadataOptions[opposite].get(name);
+        if (oppSet && oppSet.has(schema)) {
+          e.target.checked = false;
+          alert(`Cannot ${type} a schema already selected in ${opposite}.`);
+          return;
+        }
+      }
+      handleSchemaSelection(type, name, schema, e.target.checked);
+      updateSelectionCount(type, name, schemas.size);
+    });
+  });
+
+  content.appendChild(dbDiv);
+  content.appendChild(schemaList);
+
+  // Database-level checkbox selection with cross-validation
+  checkbox.addEventListener('change', e => {
+    if (e.target.checked) {
+      const allowed = [];
+      const oppMap = metadataOptions[opposite];
+      schemaList.querySelectorAll('div.database-item').forEach(item => {
+        const sl = item.querySelector('label');
+        const cb = item.querySelector('input[type="checkbox"]');
+        const sname = sl ? sl.textContent : '';
+        const conflict = oppMap.has(name) && oppMap.get(name).has(sname);
+        if (!conflict) { cb.checked = true; allowed.push(sname); }
+        else { cb.checked = false; }
+      });
+      handleDatabaseSelection(type, name, allowed, true);
+      updateSelectionCount(type, name, schemas.size);
+    } else {
+      schemaList.querySelectorAll('input[type="checkbox"]').forEach(cb=>cb.checked=false);
+      handleDatabaseSelection(type, name, Array.from(schemas), false);
+      updateSelectionCount(type, name, schemas.size);
+    }
+  });
+
+  dbDiv.addEventListener('click', e => { if (e.target.type !== 'checkbox') schemaList.classList.toggle('show'); });
+}
 
 async function populateMetadataDropdowns(){ const includeDD=document.getElementById('includeMetadata'); const excludeDD=document.getElementById('excludeMetadata'); includeDD.querySelector('.dropdown-content').innerHTML=''; excludeDD.querySelector('.dropdown-content').innerHTML=''; const dbs=await fetchMetadata(); dbs.forEach((schemas,db)=>{ buildDBBlock('include',db,schemas); buildDBBlock('exclude',db,schemas);}); document.getElementById('page3-nav').style.display='flex'; }
 
