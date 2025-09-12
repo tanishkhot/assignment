@@ -19,8 +19,11 @@ class SQLMetadataExtractionWorkflow(BaseSQLMetadataExtractionWorkflow):
     def get_activities(activities: SQLMetadataExtractionActivities):
         base = list(BaseSQLMetadataExtractionWorkflow.get_activities(activities))
         # Register custom activities so the worker knows about them
+        base.append(activities.fetch_view_dependencies)
+        base.append(activities.transform_view_dependencies)
         base.append(activities.fetch_relationships)
         base.append(activities.transform_relationships)
+        base.append(activities.summarize_outputs)
         base.append(activities.write_text_output)
         return base
 
@@ -37,8 +40,22 @@ class SQLMetadataExtractionWorkflow(BaseSQLMetadataExtractionWorkflow):
             start_to_close_timeout=self.default_start_to_close_timeout,
             heartbeat_timeout=self.default_heartbeat_timeout,
         )
-        # Run relationship fetch + transform
+        # Run view dependency and relationship lineage
         retry_policy = RetryPolicy(maximum_attempts=3, backoff_coefficient=2)
+        await workflow.execute_activity_method(
+            self.activities_cls.fetch_view_dependencies,
+            args=[workflow_args],
+            retry_policy=retry_policy,
+            start_to_close_timeout=self.default_start_to_close_timeout,
+            heartbeat_timeout=self.default_heartbeat_timeout,
+        )
+        await workflow.execute_activity_method(
+            self.activities_cls.transform_view_dependencies,
+            args=[workflow_args],
+            retry_policy=retry_policy,
+            start_to_close_timeout=self.default_start_to_close_timeout,
+            heartbeat_timeout=self.default_heartbeat_timeout,
+        )
         await workflow.execute_activity_method(
             self.activities_cls.fetch_relationships,
             args=[workflow_args],
@@ -54,6 +71,17 @@ class SQLMetadataExtractionWorkflow(BaseSQLMetadataExtractionWorkflow):
             heartbeat_timeout=self.default_heartbeat_timeout,
         )
         await self.run_exit_activities(workflow_args)
+
+        # Summarize outputs for Temporal UI result
+        summary = await workflow.execute_activity_method(
+            self.activities_cls.summarize_outputs,
+            args=[workflow_args],
+            retry_policy=RetryPolicy(maximum_attempts=3, backoff_coefficient=2),
+            start_to_close_timeout=self.default_start_to_close_timeout,
+            heartbeat_timeout=self.default_heartbeat_timeout,
+        )
+        # Return summary so Temporal UI shows a human-readable result
+        return summary
 
     async def run_exit_activities(self, workflow_args: dict) -> None:
         retry_policy = RetryPolicy(maximum_attempts=6, backoff_coefficient=2)

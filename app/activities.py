@@ -60,7 +60,7 @@ class SQLMetadataExtractionActivities(BaseSQLMetadataExtractionActivities):
         os.makedirs(out_dir, exist_ok=True)
         out_file = os.path.join(out_dir, "output.txt")
 
-        types = ["database", "schema", "table", "column", "relationship"]
+        types = ["database", "schema", "table", "column", "relationship", "view_dependency"]
         wrote_any = False
         import pandas as pd
 
@@ -163,6 +163,135 @@ class SQLMetadataExtractionActivities(BaseSQLMetadataExtractionActivities):
                 })
             if rows:
                 import pandas as pd
+                await out.write_dataframe(pd.DataFrame(rows))
+                total += len(rows)
+
+        stats = await out.get_statistics(typename=typename)
+        return stats
+
+    @activity.defn
+    async def summarize_outputs(self, workflow_args: dict) -> dict:
+        """Summarize transformed outputs into a small JSON for Temporal result.
+
+        Collects statistics.json.ignore for each typename and returns counts plus
+        the human-readable export file path.
+        """
+        import json
+        summary: dict = {"types": {}}
+        output_prefix = workflow_args.get("output_prefix")
+        output_path = workflow_args.get("output_path")
+        workflow_id = workflow_args.get("workflow_id")
+        if not (output_prefix and output_path and workflow_id):
+            return summary
+
+        transformed_dir = os.path.join(output_path, "transformed")
+        # Download transformed folder index so stats files are present locally
+        try:
+            await ObjectStore.download_prefix(
+                source=get_object_store_prefix(transformed_dir),
+                destination=TEMPORARY_PATH,
+            )
+        except Exception:
+            pass
+
+        for typename in [
+            "database",
+            "schema",
+            "table",
+            "column",
+            "view_dependency",
+            "relationship",
+        ]:
+            stats_path = os.path.join(
+                output_path, "transformed", typename, "statistics.json.ignore"
+            )
+            try:
+                # Ensure latest copy locally
+                await ObjectStore.download_file(
+                    source=get_object_store_prefix(stats_path),
+                    destination=stats_path,
+                )
+            except Exception:
+                continue
+            try:
+                with open(stats_path, "r", encoding="utf-8") as f:
+                    stats = json.load(f)
+                summary["types"][typename] = {
+                    "total_record_count": stats.get("total_record_count", 0),
+                    "chunk_count": stats.get("chunk_count", 0),
+                }
+            except Exception:
+                continue
+
+        # Add convenient paths
+        summary["output_text"] = os.path.join("output", workflow_id, "output.txt")
+        summary["objectstore_prefix"] = get_object_store_prefix(output_path)
+        return summary
+
+    @activity.defn
+    async def fetch_view_dependencies(self, workflow_args: dict):
+        state = await self._get_state(workflow_args)
+        if not state.sql_client or not state.sql_client.engine:
+            raise ValueError("SQL client or engine not initialized")
+        from application_sdk.common.utils import prepare_query
+        query = prepare_query(
+            query=self.read_sql_query_from_file("extract_view_dependency.sql"),
+            workflow_args=workflow_args,
+        )
+        return await self.query_executor(
+            sql_engine=state.sql_client.engine,
+            sql_query=query,
+            workflow_args=workflow_args,
+            output_suffix="raw/view-dependency",
+            typename="view_dependency",
+        )
+
+    @activity.defn
+    async def transform_view_dependencies(self, workflow_args: dict):
+        """Transforms view dependency rows into table->view lineage edges JSON."""
+        output_prefix = workflow_args.get("output_prefix")
+        output_path = workflow_args.get("output_path")
+        typename = "view_dependency"
+        if not (output_prefix and output_path):
+            raise ValueError("Missing output paths")
+
+        raw_dir = os.path.join(output_path, "raw", typename)
+        try:
+            await ObjectStore.download_prefix(
+                source=get_object_store_prefix(raw_dir),
+                destination=TEMPORARY_PATH,
+            )
+        except Exception:
+            return {"total_record_count": 0, "chunk_count": 0, "typename": typename}
+
+        import pandas as pd
+        from application_sdk.outputs.json import JsonOutput
+
+        files = sorted(glob.glob(os.path.join(raw_dir, "chunk-*.parquet")))
+        out = JsonOutput(
+            output_path=output_path,
+            output_prefix=output_prefix,
+            output_suffix="transformed",
+            typename=typename,
+        )
+        total = 0
+        for p in files:
+            try:
+                df = pd.read_parquet(p)
+            except Exception:
+                continue
+            if df is None or df.empty:
+                continue
+            rows = []
+            for _, r in df.iterrows():
+                src = f"{workflow_args.get('connection',{}).get('connection_qualified_name','')}/{r.get('src_catalog_name')}/{r.get('src_schema_name')}/{r.get('src_table_name')}"
+                dst = f"{workflow_args.get('connection',{}).get('connection_qualified_name','')}/{r.get('dst_catalog_name')}/{r.get('dst_schema_name')}/{r.get('dst_table_name')}"
+                rows.append({
+                    "fromQualifiedName": src,
+                    "toQualifiedName": dst,
+                    "typeName": "view_dependency"
+                })
+            if rows:
                 await out.write_dataframe(pd.DataFrame(rows))
                 total += len(rows)
 

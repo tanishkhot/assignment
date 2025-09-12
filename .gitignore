@@ -11,3 +11,4 @@ build/
 .pytest_cache/
 *.log
 output/
+app/__pycache__
