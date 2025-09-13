@@ -255,7 +255,6 @@
                   >
                     <span>Select databases and schemas</span>
                     <span class="dropdown-arrow" aria-hidden="true"></span>
-                    <span class="dropdown-arrow" aria-hidden="true">▼</span>
                   </div>
                   <div class="dropdown-content"></div>
                   
@@ -271,7 +270,6 @@
                   >
                     <span>Select databases and schemas</span>
                     <span class="dropdown-arrow" aria-hidden="true"></span>
-                    <span class="dropdown-arrow" aria-hidden="true">▼</span>
                   </div>
                   <div class="dropdown-content"></div>
                 </div>
@@ -319,6 +317,9 @@
             <div class="section">
               <h2 style="font-size:1rem; font-weight:600; margin-bottom:0.5rem;">Results</h2>
               <p class="hint">Displays contents of <code>output/&lt;workflow_id&gt;/output.txt</code> once available.</p>
+              <div id="resultsMeta" class="hint" style="margin-top:6px; display:none;">
+                Workflow ID: <code id="workflowIdText"></code>
+              </div>
             </div>
 
             <div id="resultsPanel" class="card" style="padding:1rem;">

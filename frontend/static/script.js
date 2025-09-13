@@ -352,6 +352,15 @@ async function startResultsFlow(){
     } catch(_){}
   }
   if(openRaw && lastWorkflowId){ openRaw.href = `/output/${lastWorkflowId}/output.txt`; dlog('openRaw set', openRaw.href); }
+  // Show workflow id on UI if available
+  try{
+    const meta = document.getElementById('resultsMeta');
+    const wfid = document.getElementById('workflowIdText');
+    if (meta && wfid){
+      if (lastWorkflowId){ wfid.textContent = lastWorkflowId; meta.style.display = 'block'; }
+      else { meta.style.display = 'none'; }
+    }
+  } catch(_){ }
   if(reload){ reload.onclick = ()=>{ loadResultsAfterDelay(0); }; }
   // reset state
   err.style.display='none'; actions.style.display='none'; pre.style.display='none'; loader.style.display='flex';
@@ -403,7 +412,10 @@ function loadResultsAfterDelay(seconds){
           try{
             const latest = await fetch('/workflows/v1/latest-output', { cache: 'no-store' });
             dlog('latest-output (post-404) status', latest.status);
-            if (latest.ok){ const js = await latest.json(); if (js && js.workflow_id && js.workflow_id !== lastWorkflowId){ lastWorkflowId = js.workflow_id; sessionStorage.setItem('lastWorkflowId', lastWorkflowId); dlog('switching to newer workflow id', lastWorkflowId); return fetchResults(); } }
+            if (latest.ok){ const js = await latest.json(); if (js && js.workflow_id && js.workflow_id !== lastWorkflowId){ lastWorkflowId = js.workflow_id; sessionStorage.setItem('lastWorkflowId', lastWorkflowId); dlog('switching to newer workflow id', lastWorkflowId);
+                try{ const meta=document.getElementById('resultsMeta'); const wfid=document.getElementById('workflowIdText'); if(meta&&wfid){ wfid.textContent=lastWorkflowId; meta.style.display='block'; } }catch(_){ }
+                return fetchResults(); }
+            }
           } catch(_){ }
         }
         throw new Error(`Could not fetch results (${res.status})`);
