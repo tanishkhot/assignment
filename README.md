@@ -93,7 +93,7 @@ If Mermaid doesn’t render in your viewer, here are static diagrams you can exp
 ![End‑to‑End Flow (Static)](diagrams/flowchart.png)
 
 ![API Surface (Static)](diagrams/apis.png)
-
+-->
 ### Detailed Flow (Mermaid, styled)
 
 ```mermaid
@@ -289,12 +289,12 @@ uv run poe stop-deps             # kill common ports if needed
 - Empty sections — verify include filters match your database/schemas
 - Port conflicts — use `uv run poe stop-deps`
 - JSON parse errors — the app writes outputs atomically and the result endpoint repairs transient partial reads (should be rare)
-
+<!-- 
 ## Roadmap (Short)
 
 - Optional: expanded quality metrics roll‑up in summary
 - Optional: richer schema stats, sampling, and insights
-- Optional: export options (CSV/Excel) revisited later
+- Optional: export options (CSV/Excel) revisited later -->
 
 ## License
 
