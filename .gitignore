@@ -12,3 +12,5 @@ build/
 *.log
 output/
 app/__pycache__
+components/
+components/docker
