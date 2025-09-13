@@ -373,6 +373,13 @@ function loadResultsAfterDelay(seconds){
   const err=document.getElementById('resultsError');
   const actions=document.getElementById('resultsActions');
   const countdownEl=document.getElementById('resultsCountdown');
+  // Reset UI to loading state on every retry
+  try{
+    if (loader) loader.style.display='flex';
+    if (pre) pre.style.display='none';
+    if (err){ err.classList.remove('visible'); err.style.display='none'; }
+    if (actions) actions.style.display='none';
+  } catch(_){}
   if(resultsTimer){ clearInterval(resultsTimer); resultsTimer=null; }
   let remaining = Number(seconds)||0;
   if(remaining>0){
@@ -390,7 +397,10 @@ function loadResultsAfterDelay(seconds){
         try{
           const resp = await fetch('/workflows/v1/latest-output', { cache: 'no-store' });
           dlog('latest-output (retry) status', resp.status);
-          if (resp.ok){ const js = await resp.json(); if (js && js.workflow_id){ lastWorkflowId = js.workflow_id; sessionStorage.setItem('lastWorkflowId', lastWorkflowId); dlog('discovered (retry) workflow id', lastWorkflowId); } }
+          if (resp.ok){ const js = await resp.json(); if (js && js.workflow_id){ lastWorkflowId = js.workflow_id; sessionStorage.setItem('lastWorkflowId', lastWorkflowId); dlog('discovered (retry) workflow id', lastWorkflowId);
+              try{ const meta=document.getElementById('resultsMeta'); const wfid=document.getElementById('workflowIdText'); if(meta&&wfid){ wfid.textContent=lastWorkflowId; meta.style.display='block'; } }catch(_){ }
+              try{ const openRaw=document.getElementById('openRawFile'); if(openRaw){ openRaw.href = `/output/${lastWorkflowId}/output.txt`; } }catch(_){ }
+            } }
         } catch(_){ }
       }
       if (!lastWorkflowId) throw new Error('Workflow id unavailable');
@@ -414,6 +424,7 @@ function loadResultsAfterDelay(seconds){
             dlog('latest-output (post-404) status', latest.status);
             if (latest.ok){ const js = await latest.json(); if (js && js.workflow_id && js.workflow_id !== lastWorkflowId){ lastWorkflowId = js.workflow_id; sessionStorage.setItem('lastWorkflowId', lastWorkflowId); dlog('switching to newer workflow id', lastWorkflowId);
                 try{ const meta=document.getElementById('resultsMeta'); const wfid=document.getElementById('workflowIdText'); if(meta&&wfid){ wfid.textContent=lastWorkflowId; meta.style.display='block'; } }catch(_){ }
+                try{ const openRaw=document.getElementById('openRawFile'); if(openRaw){ openRaw.href = `/output/${lastWorkflowId}/output.txt`; } }catch(_){ }
                 return fetchResults(); }
             }
           } catch(_){ }
@@ -422,6 +433,7 @@ function loadResultsAfterDelay(seconds){
       }
       const text = await res.text();
       pre.textContent = text || '(empty file)'; pre.style.display='block'; loader.style.display='none'; actions.style.display='flex'; err.style.display='none';
+      try{ const openRaw=document.getElementById('openRawFile'); if(openRaw){ openRaw.href = `/output/${lastWorkflowId}/output.txt`; } }catch(_){ }
       dlog('results loaded', text.length);
     } catch(e){
       loader.style.display='none'; pre.style.display='none'; actions.style.display='flex';
