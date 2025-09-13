@@ -1,0 +1,70 @@
+services:
+  temporal:
+    image: temporalio/auto-setup:1.19.0
+    ports:
+      - "7233:7233"
+    environment:
+      - DB=postgresql
+      - POSTGRES_USER=postgres
+      - POSTGRES_PWD=postgrespw
+      - POSTGRES_DB=temporal
+      - POSTGRES_VISIBILITY_DB=temporal_visibility
+      - POSTGRES_SEEDS=postgres:5432
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:7233/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres:
+    image: postgres:15
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespw
+      POSTGRES_DB: temporal
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+      - "3500:3500"
+      - "50001:50001"
+    depends_on:
+      - temporal
+      - postgres
+    volumes:
+      - .:/app
+      - ./local/dapr:/data
+    env_file:
+      - .env
+    environment:
+      # Ensure app talks to Temporal over docker network
+      ATLAN_WORKFLOW_HOST: temporal
+      ATLAN_WORKFLOW_PORT: 7233
+    restart: "on-failure:5"
+
+  temporal-ui:
+    image: temporalio/ui:2.30.3
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+    ports:
+      - "8080:8080"
+    depends_on:
+      - temporal
+
+volumes:
+  postgres-data: {}

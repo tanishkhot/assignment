@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>SourceSense</title>
+    <title>Postgres Connector</title>
     <link
       rel="icon"
       type="image/png"
@@ -22,27 +22,7 @@
       sizes="16x16"
       href="https://atlan.com/favicon-16x16.png"
     />
-    <link rel="stylesheet" href="styles.css?v=2" />
-    <style>
-      /* Landing hero overlay (isolated styles, no impact on app) */
-      #landing-hero { position: fixed; inset: 0; z-index: 9999; display: grid; place-items: center; background:
-          radial-gradient(1200px 800px at 20% -10%, rgba(96,165,250,.15), transparent 60%),
-          radial-gradient(1000px 700px at 120% 20%, rgba(34,211,238,.12), transparent 60%),
-          linear-gradient(180deg, #0b1220 0%, #0f172a 60%, #111827 100%);
-        color: #e5e7eb; transition: opacity .35s ease, transform .35s ease; }
-      #landing-hero.hide { opacity: 0; transform: scale(0.98); pointer-events: none; }
-      #landing-hero .content { text-align: center; padding: 60px 20px; max-width: 960px; }
-      #landing-hero .logo { width: 60px; height: 60px; border-radius: 16px; display: grid; place-items: center; margin: 0 auto 12px; background: linear-gradient(135deg, rgba(96,165,250,.25), rgba(34,211,238,.25)); border: 1px solid rgba(255,255,255,.1); }
-      #landing-hero .logo img { width: 36px; height: 36px; filter: drop-shadow(0 6px 10px rgba(0,0,0,.25)); }
-      #landing-hero .badge { display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid rgba(255,255,255,.08); border-radius: 999px; background: rgba(255,255,255,.04); color: #94a3b8; font-size: 12px; letter-spacing: .02em; }
-      #landing-hero .title { margin-top: 16px; font-size: clamp(36px, 7vw, 60px); line-height: 1.05; font-weight: 700; letter-spacing: -0.02em; background: linear-gradient(90deg, #fff, #c7d2fe 40%, #7dd3fc 80%); -webkit-background-clip: text; background-clip: text; color: transparent; }
-      #landing-hero .subtitle { margin: 12px auto 22px; max-width: 720px; color: #94a3b8; font-size: clamp(14px, 2.2vw, 18px); }
-      #landing-hero .byline { margin-top: 4px; color: #cbd5e1; font-size: 14px; }
-      #landing-hero .actions { margin-top: 26px; display: flex; justify-content: center; gap: 14px; }
-      #landing-hero .btn { appearance: none; border: 0; background: #293c54; color: #fff; padding: 12px 18px; border-radius: 10px; font-weight: 600; font-size: 15px; cursor: pointer; transition: transform .08s ease, background .2s ease, box-shadow .2s ease; box-shadow: 0 10px 30px rgba(17,24,39,.25), inset 0 1px 0 rgba(255,255,255,.05); text-decoration: none; display: inline-flex; align-items: center; gap: 10px; }
-      #landing-hero .btn:hover { background: #36465a; transform: translateY(-1px); }
-      #landing-hero footer { margin-top: 36px; color: #94a3b8; font-size: 12px; }
-    </style>
+    <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <script>
@@ -57,23 +37,6 @@
         TEMPORAL_UI_PORT: "8233",
       };
     </script>
-
-    <!-- Elegant landing hero overlay (non-intrusive) -->
-    <div id="landing-hero" role="dialog" aria-modal="true">
-      <div class="content" aria-labelledby="hero-title">
-        <div class="logo">
-          <img src="https://cdn-icons-png.flaticon.com/512/5968/5968342.png" alt="Postgres" />
-        </div>
-        <span class="badge">Welcome to</span>
-        <h1 id="hero-title" class="title">SourceSense</h1>
-        <p class="subtitle">A clean, elegant starting point for exploring your Postgres metadata.</p>
-        <div class="byline">By Tanish Khot</div>
-        <div class="actions">
-          <a id="enter-app" class="btn" href="#">Take me to the postgres connector</a>
-        </div>
-        <footer>Press Enter or click the button to continue.</footer>
-      </div>
-    </div>
 
     <div class="container">
       <header class="header">
@@ -103,10 +66,6 @@
             <div class="step" data-step="3" onclick="goToPage(3)">
               <div class="step-indicator">3</div>
               <span>Metadata</span>
-            </div>
-            <div class="step" data-step="4" onclick="goToPage(4)">
-              <div class="step-indicator">4</div>
-              <span>Results</span>
             </div>
           </div>
         </div>
@@ -307,36 +266,7 @@
                   <button id="runWorkflowButton" class="btn btn-primary">
                     Run
                   </button>
-                  <button id="goToResultsInline" class="btn btn-outline">
-                    Go to Results
-                  </button>
                 </div>
-              </div>
-            </div>
-          </div>
-
-          <div id="page4" class="page">
-            <div class="section">
-              <h2 style="font-size:1rem; font-weight:600; margin-bottom:0.5rem;">Results</h2>
-              <p class="hint">Displays contents of <code>output/&lt;workflow_id&gt;/output.txt</code> once available.</p>
-            </div>
-
-            <div id="resultsPanel" class="card" style="padding:1rem;">
-              <div id="resultsLoader" class="results-loader">
-                <div class="spinner-rolling"></div>
-                <div><span id="resultsCountdown">10</span>s — preparing your results…</div>
-              </div>
-              <pre id="resultsContent" class="results-pre" style="display:none;"></pre>
-              <div id="resultsActions" class="results-actions" style="display:none; gap:8px;">
-                <button id="reloadResults" class="btn btn-secondary">Try Again</button>
-                <a id="openRawFile" href="#" target="_blank" class="btn btn-outline">Open Raw File</a>
-              </div>
-              <div id="resultsError" class="error-message" style="display:none;"></div>
-            </div>
-
-            <div class="bottom-bar">
-              <div id="page4-nav" class="nav-buttons">
-                <button onclick="previousPage()" class="btn btn-secondary">Previous</button>
               </div>
             </div>
           </div>
@@ -361,26 +291,17 @@
         </div>
         <h2>Workflow Started Successfully!</h2>
         <p>Your workflow has been initiated and is now running.</p>
-        <div class="modal-actions" style="display:flex; gap:8px; justify-content:center; flex-wrap:wrap;">
-          <a href="http://localhost:8233/namespaces/default/workflows" class="btn btn-primary" target="_blank">Go to Dashboard</a>
-          <button id="viewResultsBtn" class="btn btn-outline">View Results</button>
+        <div class="modal-actions">
+          <a
+            href="http://localhost:8233/namespaces/default/workflows"
+            class="btn btn-primary"
+            target="_blank"
+            >Go to Dashboard</a
+          >
         </div>
       </div>
     </div>
-    <script src="script.js?v=2"></script>
-    <script>
-      // Dismiss landing overlay to reveal the app underneath
-      (function(){
-        const hero = document.getElementById('landing-hero');
-        const cta = document.getElementById('enter-app');
-        function dismiss(e){ if(e) e.preventDefault(); if(!hero) return; hero.classList.add('hide'); setTimeout(()=>{ hero.remove(); }, 380); }
-        if (cta) cta.addEventListener('click', dismiss);
-        // Keyboard accessibility: Enter/Escape
-        document.addEventListener('keydown', (e)=>{
-          if (!hero) return;
-          if (e.key === 'Enter' || e.key === 'Escape') dismiss();
-        });
-      })();
-    </script>
+    <script src="script.js"></script>
   </body>
-</html>
+  </html>
+

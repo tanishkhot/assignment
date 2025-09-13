@@ -7,13 +7,51 @@
     --success-color: #10B981;
 }
 
+/* Atlan-like card field visuals */
+.card {
+    background: #ffffff;
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+.field .label-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.hint {
+    font-size: 0.8rem;
+    color: var(--secondary-color);
+}
+.invalid input, .invalid select {
+    border-color: #DC2626;
+    box-shadow: 0 0 0 3px rgba(220,38,38,0.08);
+}
+.valid input, .valid select {
+    border-color: #10B981;
+}
+
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif; background-color: var(--background-color); color: #111827; line-height: 1.5; }
 .container { max-width: 1200px; margin: 0 auto; padding: 2rem; }
 .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; padding: 0.5rem 0; }
 .logo-container { display: flex; align-items: center; gap: 0.75rem; }
 .logo-container h1 { font-size: 1.5rem; font-weight: 600; }
-.main-content { display: flex; gap: 2rem; background-color: white; border-radius: 0.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 2rem; }
+.main-content {
+    display: flex;
+    gap: 2rem;
+    background-color: white;
+    border-radius: 0.5rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    padding: 2rem;
+    position: relative;        /* allow popovers to escape but maintain stacking context */
+    overflow: visible;
+}
 .sidebar { width: 200px; flex-shrink: 0; }
 .step-list { display: flex; flex-direction: column; gap: 1.5rem; }
 .step { display: flex; align-items: center; gap: 0.75rem; color: var(--secondary-color); }
@@ -33,7 +71,7 @@ input[type="text"], input[type="password"], select { width: 100%; padding: 0.5re
 .btn-primary { background-color: var(--primary-color); color: white; border-color: var(--primary-color); }
 .btn-secondary { background-color: white; color: var(--secondary-color); }
 .btn-outline { background-color: white; color: var(--primary-color); border: 1px solid var(--primary-color); }
-.btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.btn:disabled { opacity: 0.6; cursor: not-allowed; pointer-events: none; }
 .form-group.horizontal { display: flex; gap: 16px; align-items: flex-start; }
 .input-wrapper { display: flex; flex-direction: column; }
 .flex-grow { flex: 1; }
@@ -43,10 +81,99 @@ input[type="text"], input[type="password"], select { width: 100%; padding: 0.5re
 .error-message.visible { display: block; }
 .help-icon { display:inline-block; margin-left:6px; cursor: help; font-size: 0.9rem; color: var(--secondary-color); }
 .nav-buttons { display: flex; justify-content: space-between; width: 100%; margin: 0 auto; }
-.metadata-dropdown { position: relative; border: 1px solid var(--border-color); border-radius: 0.375rem; }
-.dropdown-header { display: flex; align-items: center; justify-content: space-between; padding: 0.5rem 0.75rem; border: 1px solid var(--border-color); border-radius: 0.375rem; background-color: white; cursor: pointer; }
-.dropdown-content { display: none; position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid var(--border-color); border-radius: 0.375rem; margin-top: 4px; max-height: 300px; overflow-y: auto; z-index: 1000; }
+.metadata-dropdown {
+    position: relative;
+    border: 1px solid var(--border-color);
+    border-radius: 0.375rem;
+    background: #fff;
+}
+.dropdown-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: 0.375rem;
+    background-color: white;
+    cursor: pointer;
+}
+.dropdown-content {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 100%;
+    background: white;
+    border: 1px solid var(--border-color);
+    border-radius: 0.375rem;
+    margin-top: 4px;
+    max-height: 300px;
+    overflow-y: auto;
+    z-index: 1000;
+    display: none;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.08);
+    padding: 0.25rem 0;
+}
+
+/* Arrow icon flip (robust pure CSS chevron) */
+.metadata-dropdown .dropdown-arrow{
+  display: inline-flex;         /* reliable transform container */
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 16px;                  /* bigger = easier to see */
+  height: 16px;
+  margin-left: 8px;
+  color: #374151;               /* ensure visible even with light parent color */
+}
+.metadata-dropdown .dropdown-arrow::before{
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border: 2px solid currentColor;  /* draw chevron */
+  border-left: 0;
+  border-top: 0;
+  transform: rotate(45deg);
+  transition: transform 0.2s ease;
+}
+.metadata-dropdown.open .dropdown-arrow::before{
+  transform: rotate(-135deg);
+}
+/* Loading spinner inside dropdown */
+.dropdown-content .spinner {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  color: var(--secondary-color);
+}
+.dropdown-content .spinner::before {
+  content: "";
+  width: 16px;
+  height: 16px;
+  border: 2px solid #d1d5db;         /* neutral gray */
+  border-top-color: var(--primary-color);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
 .dropdown-content.show { display: block; }
+/* If there's no room below, show as drop-up */
+.metadata-dropdown.dropup .dropdown-content {
+    top: auto;
+    bottom: 100%;
+    margin-top: 0;
+    margin-bottom: 4px;
+}
+/* Make sure the container never clips the dropdown */
+.form-container { overflow: visible; }
+
+/* Dropdown open state and spacer for visual separation */
+.metadata-dropdown.open { outline: 2px solid rgba(41,60,84,0.08); }
+.metadata-dropdown.open .spacer {
+    height: 8px;
+    width: 100%;
+}
 .database-item { padding: 0.75rem; border-bottom: 1px solid var(--border-color); cursor: pointer; }
 .database-item:hover { background-color: #F3F4F6; }
 .schema-list { display: none; padding-left: 1rem; }
@@ -64,3 +191,9 @@ input[type="text"], input[type="password"], select { width: 100%; padding: 0.5re
 .modal.show { display: flex; }
 .modal-content { background: white; padding: 1.5rem; border-radius: 0.5rem; width: 420px; text-align: center; }
 .success-icon { color: #10B981; margin-bottom: 0.75rem; }
+
+/* Results page additions */
+.results-pre { background: #0b1220; color: #e5e7eb; padding: 1rem; border-radius: 0.5rem; max-height: 420px; overflow: auto; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 12px; border: 1px solid var(--border-color); }
+.results-loader { display: flex; align-items: center; gap: 10px; padding: 0.75rem; color: var(--secondary-color); }
+.spinner-rolling { width: 18px; height: 18px; border: 2px solid #d1d5db; border-top-color: var(--primary-color); border-radius: 50%; animation: spin 0.8s linear infinite; }
+.results-actions { margin-top: 0.75rem; display: flex; }

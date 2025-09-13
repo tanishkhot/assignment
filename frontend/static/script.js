@@ -1,8 +1,31 @@
+// Debug helpers
+const DEBUG = true;
+const dlog = (...args) => { if (DEBUG) console.log('[SourceSense]', ...args); };
+console.log('[SourceSense] JS boot');
+try { dlog('initialized'); } catch(_){ }
+
 let currentPage = 1;
 let currentAuthType = "basic";
 const metadataOptions = { include: new Map(), exclude: new Map() };
+let lastWorkflowId = sessionStorage.getItem('lastWorkflowId') || null;
+let resultsTimer = null;
 
-function goToPage(n){ if (n<1||n>3) return; if(n>1 && !sessionStorage.getItem('authenticationComplete')) return; document.querySelectorAll('.page').forEach(p=>p.classList.remove('active')); document.querySelectorAll('.nav-buttons').forEach(nv=>nv.style.display='none'); document.getElementById(`page${n}`).classList.add('active'); document.getElementById(`page${n}-nav`) && (document.getElementById(`page${n}-nav`).style.display='flex'); currentPage=n; updateSteps(); if(n===3){ populateMetadataDropdowns(); }}
+function goToPage(n){
+  dlog('goToPage', { n, auth: !!sessionStorage.getItem('authenticationComplete'), lastWorkflowId: sessionStorage.getItem('lastWorkflowId') });
+  if (n < 1 || n > 4) { dlog('goToPage blocked: out of range'); return; }
+  // Allow jumping to Results (4) even if auth flag is missing
+  if (n > 1 && n !== 4 && !sessionStorage.getItem('authenticationComplete')) { dlog('goToPage blocked: auth required'); return; }
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-buttons').forEach(nv => nv.style.display = 'none');
+  const page = document.getElementById(`page${n}`);
+  if (!page) { dlog('goToPage blocked: page element missing', n); return; }
+  page.classList.add('active');
+  const nav = document.getElementById(`page${n}-nav`);
+  if (nav) { nav.style.display = 'flex'; dlog('nav shown', n); }
+  currentPage = n;
+  updateSteps();
+  if (n === 3) { dlog('populateMetadataDropdowns'); populateMetadataDropdowns(); }
+}
 function updateSteps(){ document.querySelectorAll('.step').forEach((s,i)=>{ const k=i+1; s.classList.remove('active','completed'); if(k===currentPage) s.classList.add('active'); else if(k<currentPage) s.classList.add('completed');}); }
 function nextPage(){ if(currentPage===1){ if(!sessionStorage.getItem('authenticationComplete')){ testConnection().then(ok=>{ if(ok) goToPage(2);}); return;} goToPage(2); return;} if(currentPage===2){ const cn=document.getElementById('connectionName').value.trim(); if(!cn) return; goToPage(3); return;} }
 function previousPage(){ if(currentPage>1) goToPage(currentPage-1); }
@@ -77,7 +100,60 @@ document.addEventListener('DOMContentLoaded', ()=>{
   if(btn) btn.addEventListener('click', parseConnUrl);
 });
 
-function toggleDropdown(id){ const dd=document.getElementById(id); const content=dd.querySelector('.dropdown-content'); document.querySelectorAll('.dropdown-content').forEach(c=>{ if(c!==content) c.classList.remove('show');}); content.classList.toggle('show'); event.stopPropagation(); }
+function toggleDropdown(id, evt){
+  const dd = document.getElementById(id);
+  if (!dd) return;
+  const content = dd.querySelector('.dropdown-content');
+  // Close all others first
+  document.querySelectorAll('.metadata-dropdown').forEach(x=>{
+    if (x !== dd){
+      x.classList.remove('open','dropup');
+      const c = x.querySelector('.dropdown-content');
+      c && c.classList.remove('show');
+    }
+  });
+  // Toggle this one
+  const willShow = !(content.classList.contains('show'));
+  if (willShow){
+    dd.classList.add('open');
+    content.classList.add('show');
+    // Placement calculation: if not enough space below, use dropup
+    const rect = content.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.top;
+    const headerRect = dd.querySelector('.dropdown-header').getBoundingClientRect();
+    const estimatedHeight = Math.min(300, content.scrollHeight || 300);
+    if (spaceBelow < estimatedHeight + 24){
+      dd.classList.add('dropup');
+    } else {
+      dd.classList.remove('dropup');
+    }
+    // Close on outside click / ESC
+    setTimeout(()=>{
+      const closeHandler = (e)=>{
+        if (!dd.contains(e.target)){
+          content.classList.remove('show');
+          dd.classList.remove('open','dropup');
+          document.removeEventListener('click', closeHandler);
+          document.removeEventListener('keydown', escHandler);
+        }
+      };
+      const escHandler = (e)=>{
+        if (e.key === 'Escape'){
+          content.classList.remove('show');
+          dd.classList.remove('open','dropup');
+          document.removeEventListener('click', closeHandler);
+          document.removeEventListener('keydown', escHandler);
+        }
+      };
+      document.addEventListener('click', closeHandler);
+      document.addEventListener('keydown', escHandler);
+    }, 0);
+  } else {
+    content.classList.remove('show');
+    dd.classList.remove('open','dropup');
+  }
+  if (evt && evt.stopPropagation) evt.stopPropagation();
+}
 
 function processMetadataResponse(rows){ const db=new Map(); rows.forEach(it=>{ const c=it.catalog_name||it.TABLE_CATALOG; const s=it.schema_name||it.TABLE_SCHEMA; if(!c||!s) return; if(!db.has(c)) db.set(c,new Set()); db.get(c).add(s);}); return db; }
 
@@ -183,7 +259,37 @@ function syncOppositeSchemaCheckbox(opposite, dbName, schemaName, disable){
   }
 }
 
-async function populateMetadataDropdowns(){ const includeDD=document.getElementById('includeMetadata'); const excludeDD=document.getElementById('excludeMetadata'); includeDD.querySelector('.dropdown-content').innerHTML=''; excludeDD.querySelector('.dropdown-content').innerHTML=''; const dbs=await fetchMetadata(); dbs.forEach((schemas,db)=>{ buildDBBlock('include',db,schemas); buildDBBlock('exclude',db,schemas);}); document.getElementById('page3-nav').style.display='flex'; }
+async function populateMetadataDropdowns(){
+  const includeDD = document.getElementById('includeMetadata');
+  const excludeDD = document.getElementById('excludeMetadata');
+  if (!includeDD || !excludeDD) return;
+
+  const incContent = includeDD.querySelector('.dropdown-content');
+  const excContent = excludeDD.querySelector('.dropdown-content');
+
+  // show loading spinners while fetching
+  const spinnerHtml = '<div class="spinner">Loading metadata…</div>';
+  incContent.innerHTML = spinnerHtml;
+  excContent.innerHTML = spinnerHtml;
+
+  try {
+    const dbs = await fetchMetadata();
+
+    // replace spinners with actual checklists
+    incContent.innerHTML = '';
+    excContent.innerHTML = '';
+    dbs.forEach((schemas, db) => {
+      buildDBBlock('include', db, schemas);
+      buildDBBlock('exclude', db, schemas);
+    });
+
+    document.getElementById('page3-nav').style.display = 'flex';
+  } catch (e) {
+    console.error('Failed to fetch metadata', e);
+    incContent.innerHTML = '<div class="spinner">Failed to load metadata</div>';
+    excContent.innerHTML = '<div class="spinner">Failed to load metadata</div>';
+  }
+}
 
 function handleDatabaseSelection(type, db, schemas, isSel){ if(!metadataOptions[type].has(db)) metadataOptions[type].set(db,new Set()); if(isSel){ schemas.forEach(s=>metadataOptions[type].get(db).add(s)); } else { metadataOptions[type].get(db).clear(); } updateDropdownHeader(type); }
 function handleSchemaSelection(type, db, schema, isSel){ if(!metadataOptions[type].has(db)) metadataOptions[type].set(db,new Set()); if(isSel) metadataOptions[type].get(db).add(schema); else metadataOptions[type].get(db).delete(schema); updateDropdownHeader(type); }
@@ -195,12 +301,189 @@ async function runPreflightChecks(){ const btn=document.getElementById('runPrefl
 
 function setupPreflight(){ const b=document.getElementById('runPreflightChecks'); if(b){ b.addEventListener('click', runPreflightChecks);} }
 
-function handleRunWorkflow(){ const runBtn=document.getElementById('runWorkflowButton'); const modal=document.getElementById('successModal'); if(!runBtn) return; runBtn.addEventListener('click', async ()=>{ try{ runBtn.disabled=true; runBtn.textContent='Starting...'; const filters=formatFilters(); const tenant=(window.env&&window.env.TENANT_ID)||'default'; const app=(window.env&&window.env.APP_NAME)||'postgres'; const epoch=Math.floor(Date.now()/1000); const payload={ credentials:{ authType: currentAuthType, host:document.getElementById('host').value, port:Number(document.getElementById('port').value), username:document.getElementById('username').value, password:document.getElementById('password').value, database:document.getElementById('database').value }, connection:{ connection_name: document.getElementById('connectionName').value, connection_qualified_name: `${tenant}/${app}/${epoch}` }, metadata:{ "include-filter": filters.include, "exclude-filter": filters.exclude, "temp-table-regex": document.getElementById('temp-table-regex').value, "exclude_views": false, "exclude_empty_tables": false }, tenant_id: tenant }; const res=await fetch('/workflows/v1/start',{method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)}); if(!res.ok) throw new Error('Failed to start workflow'); runBtn.textContent='Started Successfully'; modal.classList.add('show'); } catch(e){ console.error(e); runBtn.textContent='Failed to Start'; } finally{ setTimeout(()=>{ runBtn.disabled=false; runBtn.textContent='Run'; document.getElementById('successModal').classList.remove('show'); }, 2500);} }); }
+function handleRunWorkflow(){
+  dlog('handleRunWorkflow attach');
+  const runBtn = document.getElementById('runWorkflowButton');
+  const modal = document.getElementById('successModal');
+  const inlineBtn = document.getElementById('goToResultsInline');
+  if(!runBtn){ dlog('runWorkflowButton not found'); return; }
+  runBtn.addEventListener('click', async ()=>{
+    dlog('Run clicked');
+    try{
+      runBtn.disabled=true; runBtn.textContent='Starting...';
+      const filters=formatFilters();
+      const tenant=(window.env&&window.env.TENANT_ID)||'default';
+      const app=(window.env&&window.env.APP_NAME)||'postgres';
+      const epoch=Math.floor(Date.now()/1000);
+      const payload={ credentials:{ authType: currentAuthType, host:document.getElementById('host').value, port:Number(document.getElementById('port').value), username:document.getElementById('username').value, password:document.getElementById('password').value, database:document.getElementById('database').value }, connection:{ connection_name: document.getElementById('connectionName').value, connection_qualified_name: `${tenant}/${app}/${epoch}` }, metadata:{ "include-filter": filters.include, "exclude-filter": filters.exclude, "temp-table-regex": document.getElementById('temp-table-regex').value, "exclude_views": false, "exclude_empty_tables": false }, tenant_id: tenant };
+      const res=await fetch('/workflows/v1/start',{method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
+      dlog('start response status', res.status);
+      let data={}; try{ data=await res.json(); }catch(_){}
+      if(!res.ok) { dlog('start failed body', data); throw new Error((data && (data.error||data.message)) || 'Failed to start workflow'); }
+      const wfId = data.workflow_id || data.id || data.workflowId || (data.data && (data.data.workflow_id||data.data.id)) || `${tenant}-${epoch}`;
+      lastWorkflowId = wfId; sessionStorage.setItem('lastWorkflowId', wfId); dlog('workflow id set', wfId);
+      runBtn.textContent='Started Successfully';
+      modal.classList.add('show');
+      const viewBtn = document.getElementById('viewResultsBtn');
+      if(viewBtn){ viewBtn.onclick = (e)=>{ e.preventDefault(); dlog('modal View Results clicked'); modal.classList.remove('show'); startResultsFlow(); }; } else { dlog('viewResultsBtn not found'); }
+      if(inlineBtn){ inlineBtn.disabled = false; inlineBtn.onclick = (e)=>{ e.preventDefault(); dlog('inline Go to Results clicked'); startResultsFlow(); }; } else { dlog('inline Go to Results not found'); }
+    } catch(e){ console.error(e); dlog('Run start error', e); runBtn.textContent='Failed to Start'; }
+    finally{ runBtn.disabled=false; runBtn.textContent='Run'; }
+  });
+}
+
+async function startResultsFlow(){
+  // Ensure guards pass even if auth flag was cleared
+  dlog('startResultsFlow begin', { lastWorkflowId });
+  try { sessionStorage.setItem('authenticationComplete','true'); } catch(_) {}
+  goToPage(4);
+  const loader=document.getElementById('resultsLoader');
+  const pre=document.getElementById('resultsContent');
+  const err=document.getElementById('resultsError');
+  const actions=document.getElementById('resultsActions');
+  const openRaw=document.getElementById('openRawFile');
+  const reload=document.getElementById('reloadResults');
+  // Try to discover a workflow id if we don't have one yet
+  if(!lastWorkflowId){
+    try{
+      const resp = await fetch('/workflows/v1/latest-output', { cache: 'no-store' });
+      dlog('latest-output status', resp.status);
+      if (resp.ok){ const js = await resp.json(); if (js && js.workflow_id){ lastWorkflowId = js.workflow_id; sessionStorage.setItem('lastWorkflowId', lastWorkflowId); dlog('discovered workflow id', lastWorkflowId); } }
+    } catch(_){}
+  }
+  if(openRaw && lastWorkflowId){ openRaw.href = `/output/${lastWorkflowId}/output.txt`; dlog('openRaw set', openRaw.href); }
+  if(reload){ reload.onclick = ()=>{ loadResultsAfterDelay(0); }; }
+  // reset state
+  err.style.display='none'; actions.style.display='none'; pre.style.display='none'; loader.style.display='flex';
+  loadResultsAfterDelay(10);
+}
+
+function loadResultsAfterDelay(seconds){
+  const loader=document.getElementById('resultsLoader');
+  const pre=document.getElementById('resultsContent');
+  const err=document.getElementById('resultsError');
+  const actions=document.getElementById('resultsActions');
+  const countdownEl=document.getElementById('resultsCountdown');
+  if(resultsTimer){ clearInterval(resultsTimer); resultsTimer=null; }
+  let remaining = Number(seconds)||0;
+  if(remaining>0){
+    countdownEl.textContent = remaining;
+    resultsTimer = setInterval(()=>{
+      remaining-=1;
+      countdownEl.textContent = Math.max(0, remaining);
+      if(remaining<=0){ clearInterval(resultsTimer); resultsTimer=null; fetchResults(); }
+    }, 1000);
+  } else { fetchResults(); }
+  async function fetchResults(){
+    try{
+      if (!lastWorkflowId){
+        // Try discover again
+        try{
+          const resp = await fetch('/workflows/v1/latest-output', { cache: 'no-store' });
+          dlog('latest-output (retry) status', resp.status);
+          if (resp.ok){ const js = await resp.json(); if (js && js.workflow_id){ lastWorkflowId = js.workflow_id; sessionStorage.setItem('lastWorkflowId', lastWorkflowId); dlog('discovered (retry) workflow id', lastWorkflowId); } }
+        } catch(_){ }
+      }
+      if (!lastWorkflowId) throw new Error('Workflow id unavailable');
+      const path = `/output/${lastWorkflowId}/output.txt`;
+      let res = await fetch(path, { cache: 'no-store' });
+      dlog('fetch results', { path, status: res.status });
+      if(!res.ok){
+        // Fallback to server endpoint if /output isn't mounted
+        const alt = `/workflows/v1/result/${lastWorkflowId}`;
+        try {
+          const altRes = await fetch(alt, { cache: 'no-store' });
+          dlog('fetch alt results', { alt, status: altRes.status });
+          if (altRes.ok) { res = altRes; }
+        } catch(_) { /* ignore */ }
+      }
+      if(!res.ok){
+        // one more attempt: if 404, maybe a newer run finished
+        if (res.status === 404){
+          try{
+            const latest = await fetch('/workflows/v1/latest-output', { cache: 'no-store' });
+            dlog('latest-output (post-404) status', latest.status);
+            if (latest.ok){ const js = await latest.json(); if (js && js.workflow_id && js.workflow_id !== lastWorkflowId){ lastWorkflowId = js.workflow_id; sessionStorage.setItem('lastWorkflowId', lastWorkflowId); dlog('switching to newer workflow id', lastWorkflowId); return fetchResults(); } }
+          } catch(_){ }
+        }
+        throw new Error(`Could not fetch results (${res.status})`);
+      }
+      const text = await res.text();
+      pre.textContent = text || '(empty file)'; pre.style.display='block'; loader.style.display='none'; actions.style.display='flex'; err.style.display='none';
+      dlog('results loaded', text.length);
+    } catch(e){
+      loader.style.display='none'; pre.style.display='none'; actions.style.display='flex';
+      err.textContent = 'Results not ready yet. You can try again in a few seconds.'; err.classList.add('visible'); err.style.display='block';
+      dlog('results fetch error', e);
+    }
+  }
+}
 
 document.addEventListener('DOMContentLoaded', ()=>{
-  document.querySelectorAll('.step').forEach(step=>{ step.addEventListener('click',()=>{ const n=parseInt(step.dataset.step); if(n<=currentPage) goToPage(n);});});
+  dlog('DOMContentLoaded');
+  // Make step 4 explicitly launch the results flow so the loader is shown even if guards would block a plain nav
+  document.querySelectorAll('.step').forEach(step=>{
+    step.addEventListener('click',()=>{
+      const n=parseInt(step.dataset.step);
+      if (n === 4){
+        const modal = document.getElementById('successModal');
+        if (modal) { modal.classList.remove('show'); dlog('Sidebar Results clicked'); }
+        startResultsFlow();
+        return;
+      }
+      if(n<=currentPage) { dlog('Sidebar step clicked', n); goToPage(n); }
+    });
+  });
   sessionStorage.removeItem('authenticationComplete');
   attachPasswordToggle();
   setupPreflight();
   handleRunWorkflow();
+  // Inline results button state
+  const inlineBtn = document.getElementById('goToResultsInline');
+  if (inlineBtn){
+    dlog('inline Go to Results present');
+    inlineBtn.onclick = async (e)=>{
+      e.preventDefault();
+      const modal = document.getElementById('successModal');
+      if (modal) { modal.classList.remove('show'); dlog('Inline Results clicked'); }
+      await startResultsFlow();
+    };
+  } else { dlog('inline Go to Results NOT found'); }
+  if (lastWorkflowId){ const s4=document.querySelector('.step[data-step="4"]'); s4 && s4.classList.add('completed'); }
+  // Make dropdown headers keyboard accessible
+  document.querySelectorAll('.metadata-dropdown .dropdown-header').forEach(h=>{
+    h.setAttribute('tabindex','0');
+    h.addEventListener('keydown', (e)=>{
+      if (e.key === 'Enter' || e.key === ' '){
+        const parent = h.closest('.metadata-dropdown');
+        if (parent) toggleDropdown(parent.id, e);
+        e.preventDefault();
+      }
+    });
+  });
+  // Global error hooks
+  window.addEventListener('error', (ev)=>{ dlog('window error', ev.message || ev.error); });
+  window.addEventListener('unhandledrejection', (ev)=>{ dlog('unhandledrejection', ev.reason); });
 });
+
+// Helper: update database-level selection counter in dropdowns
+function updateSelectionCount(type, dbName, totalSchemas){
+  try {
+    const selected = (metadataOptions[type].get(dbName) || new Set()).size;
+    const dd = document.getElementById(`${type}Metadata`);
+    if (!dd) return;
+    const content = dd.querySelector('.dropdown-content');
+    if (!content) return;
+    const items = Array.from(content.children || []);
+    for (let i = 0; i < items.length; i++){
+      const node = items[i];
+      const dbCb = node.querySelector && node.querySelector('input.database-checkbox');
+      const dbLabel = node.querySelector && node.querySelector('label');
+      if (dbCb && dbLabel && dbLabel.textContent === dbName){
+        const countEl = node.querySelector('.selected-count');
+        if (countEl) countEl.textContent = `${selected}/${totalSchemas}`;
+        break;
+      }
+    }
+  } catch (_) { /* no-op */ }
+}
