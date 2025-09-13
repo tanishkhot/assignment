@@ -70,15 +70,24 @@ async def main():
                 from fastapi.responses import PlainTextResponse, JSONResponse  # type: ignore
                 from fastapi import APIRouter  # type: ignore
 
+                # Resolve absolute path regardless of current working directory
+                repo_root = os.path.dirname(os.path.abspath(__file__))
+                outputs_dir = os.path.join(repo_root, "output")
+
                 # Mount static files under /output to serve generated results
-                fastapi_app.mount("/output", StaticFiles(directory="output"), name="output")
+                # Mount even if the folder doesn't exist yet (created later by workflow)
+                fastapi_app.mount(
+                    "/output",
+                    StaticFiles(directory=outputs_dir, check_dir=False),
+                    name="output",
+                )
 
                 # Lightweight results endpoint: /workflows/v1/result/{workflow_id}
                 router = APIRouter()
 
                 @router.get("/workflows/v1/result/{workflow_id}")  # type: ignore
                 async def get_result(workflow_id: str):
-                    path = os.path.join("output", workflow_id, "output.txt")
+                    path = os.path.join(outputs_dir, workflow_id, "output.txt")
                     if os.path.exists(path):
                         try:
                             with open(path, "r", encoding="utf-8") as f:
@@ -89,7 +98,7 @@ async def main():
 
                 @router.get("/workflows/v1/latest-output")  # type: ignore
                 async def latest_output():
-                    base = os.path.join("output")
+                    base = outputs_dir
                     if not os.path.exists(base):
                         return JSONResponse({}, status_code=404)
                     try:

@@ -9,6 +9,7 @@ let currentAuthType = "basic";
 const metadataOptions = { include: new Map(), exclude: new Map() };
 let lastWorkflowId = sessionStorage.getItem('lastWorkflowId') || null;
 let resultsTimer = null;
+let resultsPoller = null;
 
 function goToPage(n){
   dlog('goToPage', { n, auth: !!sessionStorage.getItem('authenticationComplete'), lastWorkflowId: sessionStorage.getItem('lastWorkflowId') });
@@ -342,6 +343,7 @@ async function startResultsFlow(){
   const err=document.getElementById('resultsError');
   const actions=document.getElementById('resultsActions');
   const openRaw=document.getElementById('openRawFile');
+  const openDash=document.getElementById('openDashboard');
   const reload=document.getElementById('reloadResults');
   // Try to discover a workflow id if we don't have one yet
   if(!lastWorkflowId){
@@ -351,7 +353,15 @@ async function startResultsFlow(){
       if (resp.ok){ const js = await resp.json(); if (js && js.workflow_id){ lastWorkflowId = js.workflow_id; sessionStorage.setItem('lastWorkflowId', lastWorkflowId); dlog('discovered workflow id', lastWorkflowId); } }
     } catch(_){}
   }
-  if(openRaw && lastWorkflowId){ openRaw.href = `/output/${lastWorkflowId}/output.txt`; dlog('openRaw set', openRaw.href); }
+  if(openRaw && lastWorkflowId){ openRaw.href = `/workflows/v1/result/${lastWorkflowId}`; dlog('openRaw set', openRaw.href); }
+  // Set dashboard link
+  try{
+    const host = (window.env && window.env.TEMPORAL_UI_HOST) || location.hostname;
+    const port = (window.env && window.env.TEMPORAL_UI_PORT) || '8233';
+    const tenant = (window.env && window.env.TENANT_ID) || 'default';
+    const dashUrl = `http://${host}:${port}/namespaces/${tenant}/workflows`;
+    if (openDash) { openDash.href = dashUrl; dlog('dashboard href', dashUrl); }
+  } catch(_){ }
   // Show workflow id on UI if available
   try{
     const meta = document.getElementById('resultsMeta');
@@ -364,7 +374,7 @@ async function startResultsFlow(){
   if(reload){ reload.onclick = ()=>{ loadResultsAfterDelay(0); }; }
   // reset state
   err.style.display='none'; actions.style.display='none'; pre.style.display='none'; loader.style.display='flex';
-  loadResultsAfterDelay(10);
+  loadResultsAfterDelay(20);
 }
 
 function loadResultsAfterDelay(seconds){
@@ -381,6 +391,7 @@ function loadResultsAfterDelay(seconds){
     if (actions) actions.style.display='none';
   } catch(_){}
   if(resultsTimer){ clearInterval(resultsTimer); resultsTimer=null; }
+  if(resultsPoller){ clearInterval(resultsPoller); resultsPoller=null; }
   let remaining = Number(seconds)||0;
   if(remaining>0){
     countdownEl.textContent = remaining;
@@ -399,7 +410,7 @@ function loadResultsAfterDelay(seconds){
           dlog('latest-output (retry) status', resp.status);
           if (resp.ok){ const js = await resp.json(); if (js && js.workflow_id){ lastWorkflowId = js.workflow_id; sessionStorage.setItem('lastWorkflowId', lastWorkflowId); dlog('discovered (retry) workflow id', lastWorkflowId);
               try{ const meta=document.getElementById('resultsMeta'); const wfid=document.getElementById('workflowIdText'); if(meta&&wfid){ wfid.textContent=lastWorkflowId; meta.style.display='block'; } }catch(_){ }
-              try{ const openRaw=document.getElementById('openRawFile'); if(openRaw){ openRaw.href = `/output/${lastWorkflowId}/output.txt`; } }catch(_){ }
+          try{ const openRaw=document.getElementById('openRawFile'); if(openRaw){ openRaw.href = `/workflows/v1/result/${lastWorkflowId}`; } }catch(_){ }
             } }
         } catch(_){ }
       }
@@ -424,7 +435,7 @@ function loadResultsAfterDelay(seconds){
             dlog('latest-output (post-404) status', latest.status);
             if (latest.ok){ const js = await latest.json(); if (js && js.workflow_id && js.workflow_id !== lastWorkflowId){ lastWorkflowId = js.workflow_id; sessionStorage.setItem('lastWorkflowId', lastWorkflowId); dlog('switching to newer workflow id', lastWorkflowId);
                 try{ const meta=document.getElementById('resultsMeta'); const wfid=document.getElementById('workflowIdText'); if(meta&&wfid){ wfid.textContent=lastWorkflowId; meta.style.display='block'; } }catch(_){ }
-                try{ const openRaw=document.getElementById('openRawFile'); if(openRaw){ openRaw.href = `/output/${lastWorkflowId}/output.txt`; } }catch(_){ }
+                try{ const openRaw=document.getElementById('openRawFile'); if(openRaw){ openRaw.href = `/workflows/v1/result/${lastWorkflowId}`; } }catch(_){ }
                 return fetchResults(); }
             }
           } catch(_){ }
@@ -433,12 +444,14 @@ function loadResultsAfterDelay(seconds){
       }
       const text = await res.text();
       pre.textContent = text || '(empty file)'; pre.style.display='block'; loader.style.display='none'; actions.style.display='flex'; err.style.display='none';
-      try{ const openRaw=document.getElementById('openRawFile'); if(openRaw){ openRaw.href = `/output/${lastWorkflowId}/output.txt`; } }catch(_){ }
+      try{ const openRaw=document.getElementById('openRawFile'); if(openRaw){ openRaw.href = `/workflows/v1/result/${lastWorkflowId}`; } }catch(_){ }
       dlog('results loaded', text.length);
+      if (resultsPoller){ clearInterval(resultsPoller); resultsPoller = null; }
     } catch(e){
       loader.style.display='none'; pre.style.display='none'; actions.style.display='flex';
       err.textContent = 'Results not ready yet. You can try again in a few seconds.'; err.classList.add('visible'); err.style.display='block';
       dlog('results fetch error', e);
+      if (!resultsPoller){ resultsPoller = setInterval(()=>{ fetchResults(); }, 5000); }
     }
   }
 }
