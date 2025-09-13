@@ -2,7 +2,7 @@
 
 # SourceSense — Postgres Metadata Extraction (Atlan SDK)
 
-Explore and export Postgres metadata with a clean, reliable developer experience. Built on the Atlan Application SDK (Temporal + Dapr), engineered for clarity and review by Atlan engineers.
+Explore and export Postgres metadata with a clean, reliable developer experience. Built on the Atlan Application SDK (Temporal + Dapr)!
 
 </div>
 
@@ -13,8 +13,6 @@ This is a focused assignment implementation for a backend engineering role. It s
 - A small, robust service that extracts Postgres metadata (db/schema/table/column) and lineage (FK + view dependencies)
 - A pragmatic UI for auth, filters, preflight checks, and a Results view with JSON/Text toggle
 - Thoughtful reliability hardening (atomic outputs, resilient summary, consistent endpoints)
-
-The goal: be easy to review, easy to run, and easy to reason about.
 
 ## At a Glance
 
@@ -78,14 +76,125 @@ Endpoints live under: http://localhost:3000/workflows/v1
 
 ```mermaid
 flowchart LR
-  User[Engineer] --> UI[Frontend (static)]
+  User[Engineer] --> UI["Frontend (static)"]
   UI -->|HTTP| API[FastAPI Server]
   API -->|Start/Signal| Temporal[Temporal Worker]
-  Temporal -->|Activities| PG[(Postgres)]
-  Temporal -->|ObjectStore| DaprObj[(Dapr Objectstore)]
-  Temporal -->|StateStore| DaprState[(Dapr Statestore)]
+  Temporal -->|Activities| PG["(Postgres)"]
+  Temporal -->|ObjectStore| DaprObj["(Dapr Objectstore)"]
+  Temporal -->|StateStore| DaprState["(Dapr Statestore)"]
   API -->|Serve files| Outputs[/output/<workflow_id>/*/]
   UI -->|Poll| API
+```
+<!-- 
+If Mermaid doesn’t render in your viewer, here are static diagrams you can expand inline:
+
+![System Architecture (Static)](diagrams/architecture.png)
+
+![End‑to‑End Flow (Static)](diagrams/flowchart.png)
+
+![API Surface (Static)](diagrams/apis.png)
+
+### Detailed Flow (Mermaid, styled)
+
+```mermaid
+%%{init:{
+  "theme":"default",
+  "themeCSS": ".mermaid, svg { background-color:#ffffff !important; }"
+}}%%
+flowchart LR
+  %% --- Lanes ---
+  subgraph U["User"]
+    U1[Enter credentials & filters]
+  end
+
+  subgraph UI["Frontend (static)"]
+    UI1[POST /workflows/v1/check]
+    UI2[POST /workflows/v1/start]
+    UI3[GET /workflows/v1/latest-output]
+    UI4[GET /workflows/v1/result-json/]
+  end
+
+  subgraph API["FastAPI Server"]
+    API1[Preflight request]
+    API2[Start workflow]
+    API3["Serve outputs (JSON / text)"]
+  end
+
+  subgraph TW["Temporal Worker"]
+    TW1[Run preflight activities]
+    TW2["Fetch metadata (db/schema/table/column)"]
+    TW3["Derive lineage (FK + view deps)"]
+    TW4[Write outputs]
+  end
+
+  subgraph PG["Postgres DB"]
+    PG1[(Tables & version checks)]
+    PG2[(Metadata & lineage reads)]
+  end
+
+  subgraph OS["ObjectStore"]
+    OS1[(Raw & transformed outputs)]
+  end
+
+  %% --- Flow: Preflight ---
+  U1 --> UI1
+  UI1 --> API1
+  API1 --> TW1
+  TW1 --> PG1
+  TW1 --> API1R[Preflight result]
+  API1R --> UI1
+
+  %% --- Flow: Start & Extract ---
+  U1 --> UI2
+  UI2 --> API2
+  API2 --> TW2
+  TW2 --> PG2
+  TW2 --> TW3
+  TW3 --> PG2
+  TW3 --> TW4
+  TW4 --> OS1
+
+  %% --- Flow: Read Outputs ---
+  UI3 --> API3
+  UI4 --> API3
+  API3 --> UI3
+  API3 --> UI4
+```
+
+### Credential & Control Flow
+
+```mermaid
+graph TD
+    subgraph "Your Computer"
+        subgraph "Browser"
+            A[Frontend UI <br> localhost:8000]
+        end
+
+        subgraph "Backend Processes"
+            B["Python Web Server <br>"]
+            C["Dapr Sidecar <br> "]
+            D["Dapr State Store <br>"]
+            E["Temporal Worker <br>"]
+            F["Temporal Server<br> localhost:8233"]
+        end
+    end
+
+    subgraph "External Service"
+        G["PostgreSQL DB <br>"]
+    end
+
+    A -- "1. User enters credentials & clicks 'Run'" --> B
+    B -- "2. Stores credentials securely" --> C
+    C -- "3. Writes to a file" --> D
+    B -- "4. Returns a 'credential_guid' (claim ticket)" --> A
+    A -- "5. Sends 'credential_guid' to start workflow" --> B
+    B -- "6. Tells Temporal to start the recipe" --> F
+    F -- "7. Assigns recipe to an available worker" --> E
+    E -- "8. Asks Dapr for credentials using 'credential_guid'" --> C
+    C -- "9. Reads credentials from file" --> D
+    D -- "10. Returns credentials" --> C
+    C -- "11. Gives credentials to worker" --> E
+    E -- "12. Connects to DB to extract metadata" --> G
 ```
 
 ### Workflow Sequence
