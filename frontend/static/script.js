@@ -10,6 +10,7 @@ const metadataOptions = { include: new Map(), exclude: new Map() };
 let lastWorkflowId = sessionStorage.getItem('lastWorkflowId') || null;
 let resultsTimer = null;
 let resultsPoller = null;
+let resultsViewMode = (localStorage.getItem('resultsViewMode') || 'json');
 
 function goToPage(n){
   dlog('goToPage', { n, auth: !!sessionStorage.getItem('authenticationComplete'), lastWorkflowId: sessionStorage.getItem('lastWorkflowId') });
@@ -410,20 +411,21 @@ function loadResultsAfterDelay(seconds){
           dlog('latest-output (retry) status', resp.status);
           if (resp.ok){ const js = await resp.json(); if (js && js.workflow_id){ lastWorkflowId = js.workflow_id; sessionStorage.setItem('lastWorkflowId', lastWorkflowId); dlog('discovered (retry) workflow id', lastWorkflowId);
               try{ const meta=document.getElementById('resultsMeta'); const wfid=document.getElementById('workflowIdText'); if(meta&&wfid){ wfid.textContent=lastWorkflowId; meta.style.display='block'; } }catch(_){ }
-          try{ const openRaw=document.getElementById('openRawFile'); if(openRaw){ openRaw.href = `/workflows/v1/result/${lastWorkflowId}`; } }catch(_){ }
+          try{ const openRaw=document.getElementById('openRawFile'); if(openRaw){ const isJson = (resultsViewMode === 'json'); openRaw.href = isJson ? `/workflows/v1/result-json/${lastWorkflowId}` : `/workflows/v1/result/${lastWorkflowId}`; openRaw.textContent = isJson ? 'Open JSON' : 'Open Text'; } }catch(_){ }
             } }
         } catch(_){ }
       }
       if (!lastWorkflowId) throw new Error('Workflow id unavailable');
-      const path = `/output/${lastWorkflowId}/output.txt`;
+      const isJson = (resultsViewMode === 'json');
+      const path = isJson ? `/output/${lastWorkflowId}/output.json` : `/output/${lastWorkflowId}/output.txt`;
       let res = await fetch(path, { cache: 'no-store' });
-      dlog('fetch results', { path, status: res.status });
-      if(!res.ok){
+      dlog('fetch results', { mode: resultsViewMode, path, status: res.status });
+  if(!res.ok){
         // Fallback to server endpoint if /output isn't mounted
-        const alt = `/workflows/v1/result/${lastWorkflowId}`;
+        const alt = isJson ? `/workflows/v1/result-json/${lastWorkflowId}` : `/workflows/v1/result/${lastWorkflowId}`;
         try {
           const altRes = await fetch(alt, { cache: 'no-store' });
-          dlog('fetch alt results', { alt, status: altRes.status });
+          dlog('fetch alt results', { mode: resultsViewMode, alt, status: altRes.status });
           if (altRes.ok) { res = altRes; }
         } catch(_) { /* ignore */ }
       }
@@ -442,10 +444,33 @@ function loadResultsAfterDelay(seconds){
         }
         throw new Error(`Could not fetch results (${res.status})`);
       }
-      const text = await res.text();
-      pre.textContent = text || '(empty file)'; pre.style.display='block'; loader.style.display='none'; actions.style.display='flex'; err.style.display='none';
-      try{ const openRaw=document.getElementById('openRawFile'); if(openRaw){ openRaw.href = `/workflows/v1/result/${lastWorkflowId}`; } }catch(_){ }
-      dlog('results loaded', text.length);
+      let rendered = '';
+      if (isJson){
+        try { rendered = JSON.stringify(await res.json(), null, 2); }
+        catch(_) { rendered = await res.text(); }
+      } else {
+        rendered = await res.text();
+      }
+      pre.textContent = rendered || '(empty file)'; pre.style.display='block'; loader.style.display='none'; actions.style.display='flex'; err.style.display='none';
+      try{ const openRaw=document.getElementById('openRawFile'); if(openRaw){ openRaw.href = isJson ? `/workflows/v1/result-json/${lastWorkflowId}` : `/workflows/v1/result/${lastWorkflowId}`; openRaw.textContent = isJson ? 'Open JSON' : 'Open Text'; } }catch(_){ }
+      try{ /* removed excel link */ }catch(_){ }
+      // Try to fetch and render summary (show placeholder if missing)
+      try {
+        const sumRes = await fetch(`/workflows/v1/summary/${lastWorkflowId}`, { cache: 'no-store' });
+        dlog('fetch summary', { status: sumRes.status });
+        if (sumRes.ok){
+          const summary = await sumRes.json();
+          renderSummary(summary);
+          try {
+            const openSummary = document.getElementById('openSummary');
+            if (openSummary) openSummary.href = `/output/${lastWorkflowId}/summary.json`;
+            /* removed excel link */
+          } catch(_){ }
+        } else {
+          renderSummary({ types: {} });
+        }
+      } catch(_){ renderSummary({ types: {} }); }
+      dlog('results loaded');
       if (resultsPoller){ clearInterval(resultsPoller); resultsPoller = null; }
     } catch(e){
       loader.style.display='none'; pre.style.display='none'; actions.style.display='flex';
@@ -501,6 +526,24 @@ document.addEventListener('DOMContentLoaded', ()=>{
   // Global error hooks
   window.addEventListener('error', (ev)=>{ dlog('window error', ev.message || ev.error); });
   window.addEventListener('unhandledrejection', (ev)=>{ dlog('unhandledrejection', ev.reason); });
+  // Results view toggle
+  const jsonBtn = document.getElementById('viewJsonBtn');
+  const textBtn = document.getElementById('viewTextBtn');
+  function updateToggleUI(){
+    if (!jsonBtn || !textBtn) return;
+    const isJson = (resultsViewMode === 'json');
+    jsonBtn.setAttribute('aria-selected', isJson ? 'true' : 'false');
+    textBtn.setAttribute('aria-selected', isJson ? 'false' : 'true');
+    jsonBtn.className = isJson ? 'btn' : 'btn btn-secondary';
+    textBtn.className = isJson ? 'btn btn-secondary' : 'btn';
+    try{
+      const openRaw=document.getElementById('openRawFile');
+      if(openRaw){ openRaw.textContent = isJson ? 'Open JSON' : 'Open Text'; }
+    }catch(_){ }
+  }
+  updateToggleUI();
+  if (jsonBtn) jsonBtn.addEventListener('click', ()=>{ resultsViewMode='json'; localStorage.setItem('resultsViewMode','json'); updateToggleUI(); loadResultsAfterDelay(0); });
+  if (textBtn) textBtn.addEventListener('click', ()=>{ resultsViewMode='text'; localStorage.setItem('resultsViewMode','text'); updateToggleUI(); loadResultsAfterDelay(0); });
 });
 
 // Helper: update database-level selection counter in dropdowns
@@ -523,4 +566,27 @@ function updateSelectionCount(type, dbName, totalSchemas){
       }
     }
   } catch (_) { /* no-op */ }
+}
+
+// Render summary JSON into the results panel
+function renderSummary(summary){
+  try {
+    const wrap = document.getElementById('resultsSummary');
+    const body = document.getElementById('resultsSummaryBody');
+    if (!wrap || !body) return;
+    const types = (summary && summary.types) || {};
+    const lines = [];
+    const order = [
+      'database','schema','table','column',
+      'index','quality_metric',
+      'view_dependency','relationship'
+    ];
+    order.forEach(k=>{
+      const s = types[k];
+      if (s) lines.push(`${k}: ${s.total_record_count || 0} rows (${s.chunk_count || 0} chunks)`);
+    });
+    if (lines.length === 0){ body.textContent = 'No summary available.'; }
+    else { body.innerHTML = `<pre class="results-pre" style="margin:0; max-height:240px;">${lines.join('\n')}</pre>`; }
+    wrap.style.display = 'block';
+  } catch(_){ }
 }

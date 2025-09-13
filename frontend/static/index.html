@@ -320,6 +320,13 @@
               <div id="resultsMeta" class="hint" style="margin-top:6px; display:none;">
                 Workflow ID: <code id="workflowIdText"></code>
               </div>
+              <div class="hint" style="margin-top:8px; display:flex; align-items:center; gap:8px;">
+                <span>View as:</span>
+                <div id="resultsViewToggle" class="view-toggle" role="tablist" aria-label="Results View">
+                  <button id="viewJsonBtn" class="btn" role="tab" aria-selected="true">JSON</button>
+                  <button id="viewTextBtn" class="btn btn-secondary" role="tab" aria-selected="false">Text</button>
+                </div>
+              </div>
             </div>
 
             <div id="resultsPanel" class="card" style="padding:1rem;">
@@ -328,9 +335,14 @@
                 <div><span id="resultsCountdown">10</span>s — preparing your results…</div>
               </div>
               <pre id="resultsContent" class="results-pre" style="display:none;"></pre>
+              <div id="resultsSummary" class="card" style="margin-top:8px; display:none; padding:0.75rem;">
+                <div style="font-weight:600; margin-bottom:6px;">Summary</div>
+                <div id="resultsSummaryBody" class="hint">No summary available yet.</div>
+              </div>
               <div id="resultsActions" class="results-actions" style="display:none; gap:8px;">
                 <button id="reloadResults" class="btn btn-secondary">Try Again</button>
-                <a id="openRawFile" href="#" target="_blank" class="btn btn-outline">Open Raw File</a>
+                <a id="openRawFile" href="#" target="_blank" class="btn btn-outline">Open JSON</a>
+                <a id="openSummary" href="#" target="_blank" class="btn btn-outline">Open Summary</a>
                 <a id="openDashboard" href="#" target="_blank" class="btn btn-primary">Go to Dashboard</a>
               </div>
               <div id="resultsError" class="error-message" style="display:none;"></div>

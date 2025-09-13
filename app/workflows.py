@@ -19,12 +19,18 @@ class SQLMetadataExtractionWorkflow(BaseSQLMetadataExtractionWorkflow):
     def get_activities(activities: SQLMetadataExtractionActivities):
         base = list(BaseSQLMetadataExtractionWorkflow.get_activities(activities))
         # Register custom activities so the worker knows about them
+        base.append(activities.fetch_indexes)
+        base.append(activities.transform_indexes)
+        base.append(activities.fetch_quality_metrics)
+        base.append(activities.transform_quality_metrics)
         base.append(activities.fetch_view_dependencies)
         base.append(activities.transform_view_dependencies)
         base.append(activities.fetch_relationships)
         base.append(activities.transform_relationships)
         base.append(activities.summarize_outputs)
+        base.append(activities.write_json_output)
         base.append(activities.write_text_output)
+        base.append(activities.write_excel_output)
         return base
 
     @workflow.run
@@ -42,6 +48,36 @@ class SQLMetadataExtractionWorkflow(BaseSQLMetadataExtractionWorkflow):
         )
         # Run view dependency and relationship lineage
         retry_policy = RetryPolicy(maximum_attempts=3, backoff_coefficient=2)
+        # Indexes
+        await workflow.execute_activity_method(
+            self.activities_cls.fetch_indexes,
+            args=[workflow_args],
+            retry_policy=retry_policy,
+            start_to_close_timeout=self.default_start_to_close_timeout,
+            heartbeat_timeout=self.default_heartbeat_timeout,
+        )
+        await workflow.execute_activity_method(
+            self.activities_cls.transform_indexes,
+            args=[workflow_args],
+            retry_policy=retry_policy,
+            start_to_close_timeout=self.default_start_to_close_timeout,
+            heartbeat_timeout=self.default_heartbeat_timeout,
+        )
+        # Quality metrics
+        await workflow.execute_activity_method(
+            self.activities_cls.fetch_quality_metrics,
+            args=[workflow_args],
+            retry_policy=retry_policy,
+            start_to_close_timeout=self.default_start_to_close_timeout,
+            heartbeat_timeout=self.default_heartbeat_timeout,
+        )
+        await workflow.execute_activity_method(
+            self.activities_cls.transform_quality_metrics,
+            args=[workflow_args],
+            retry_policy=retry_policy,
+            start_to_close_timeout=self.default_start_to_close_timeout,
+            heartbeat_timeout=self.default_heartbeat_timeout,
+        )
         await workflow.execute_activity_method(
             self.activities_cls.fetch_view_dependencies,
             args=[workflow_args],
@@ -86,21 +122,55 @@ class SQLMetadataExtractionWorkflow(BaseSQLMetadataExtractionWorkflow):
     async def run_exit_activities(self, workflow_args: dict) -> None:
         retry_policy = RetryPolicy(maximum_attempts=6, backoff_coefficient=2)
 
-        # Write human-readable text output
-        await workflow.execute_activity_method(
-            self.activities_cls.write_text_output,
-            args=[workflow_args],
-            retry_policy=retry_policy,
-            start_to_close_timeout=self.default_start_to_close_timeout,
-            heartbeat_timeout=self.default_heartbeat_timeout,
-        )
-
-        # Preserve base behavior: optional Atlan upload
-        if ENABLE_ATLAN_UPLOAD:
+        # Write JSON output (default/preferred)
+        try:
             await workflow.execute_activity_method(
-                self.activities_cls.upload_to_atlan,
+                self.activities_cls.write_json_output,
                 args=[workflow_args],
                 retry_policy=retry_policy,
                 start_to_close_timeout=self.default_start_to_close_timeout,
                 heartbeat_timeout=self.default_heartbeat_timeout,
             )
+        except Exception:
+            # Non-fatal
+            pass
+
+        # Write human-readable text output
+        try:
+            await workflow.execute_activity_method(
+                self.activities_cls.write_text_output,
+                args=[workflow_args],
+                retry_policy=retry_policy,
+                start_to_close_timeout=self.default_start_to_close_timeout,
+                heartbeat_timeout=self.default_heartbeat_timeout,
+            )
+        except Exception:
+            # Non-fatal
+            pass
+
+        # Preserve base behavior: optional Atlan upload
+        if ENABLE_ATLAN_UPLOAD:
+            try:
+                await workflow.execute_activity_method(
+                    self.activities_cls.upload_to_atlan,
+                    args=[workflow_args],
+                    retry_policy=retry_policy,
+                    start_to_close_timeout=self.default_start_to_close_timeout,
+                    heartbeat_timeout=self.default_heartbeat_timeout,
+                )
+            except Exception:
+                # Non-fatal
+                pass
+
+        # Write Excel export (optional convenience)
+        try:
+            await workflow.execute_activity_method(
+                self.activities_cls.write_excel_output,
+                args=[workflow_args],
+                retry_policy=retry_policy,
+                start_to_close_timeout=self.default_start_to_close_timeout,
+                heartbeat_timeout=self.default_heartbeat_timeout,
+            )
+        except Exception:
+            # Non-fatal: do not block summary
+            pass

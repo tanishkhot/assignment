@@ -67,7 +67,7 @@ async def main():
             fastapi_app: Optional[object] = getattr(getattr(application, "server", None), "app", None)
             if fastapi_app:
                 from fastapi.staticfiles import StaticFiles  # type: ignore
-                from fastapi.responses import PlainTextResponse, JSONResponse  # type: ignore
+                from fastapi.responses import PlainTextResponse, JSONResponse, Response  # type: ignore
                 from fastapi import APIRouter  # type: ignore
 
                 # Resolve absolute path regardless of current working directory
@@ -106,15 +106,58 @@ async def main():
                         for name in os.listdir(base):
                             p = os.path.join(base, name)
                             if os.path.isdir(p):
-                                out = os.path.join(p, "output.txt")
-                                if os.path.exists(out):
-                                    candidates.append((name, os.path.getmtime(out)))
+                                txt = os.path.join(p, "output.txt")
+                                jsn = os.path.join(p, "output.json")
+                                latest_mtime = None
+                                if os.path.exists(txt):
+                                    latest_mtime = os.path.getmtime(txt)
+                                if os.path.exists(jsn):
+                                    m = os.path.getmtime(jsn)
+                                    latest_mtime = max(latest_mtime, m) if latest_mtime else m
+                                if latest_mtime is not None:
+                                    candidates.append((name, latest_mtime))
                         if not candidates:
                             return JSONResponse({}, status_code=404)
                         candidates.sort(key=lambda x: x[1], reverse=True)
                         return JSONResponse({"workflow_id": candidates[0][0]})
                     except Exception:
                         return JSONResponse({}, status_code=500)
+
+                @router.get("/workflows/v1/summary/{workflow_id}")  # type: ignore
+                async def get_summary(workflow_id: str):
+                    path = os.path.join(outputs_dir, workflow_id, "summary.json")
+                    if os.path.exists(path):
+                        try:
+                            with open(path, "r", encoding="utf-8") as f:
+                                import json
+                                return JSONResponse(json.load(f))
+                        except Exception:
+                            return JSONResponse({}, status_code=500)
+                    return JSONResponse({}, status_code=404)
+
+                @router.get("/workflows/v1/result-json/{workflow_id}")  # type: ignore
+                async def get_result_json(workflow_id: str):
+                    path = os.path.join(outputs_dir, workflow_id, "output.json")
+                    if os.path.exists(path):
+                        try:
+                            with open(path, "r", encoding="utf-8") as f:
+                                text = f.read()
+                                import json
+                                try:
+                                    return JSONResponse(json.loads(text))
+                                except Exception:
+                                    # Attempt simple repair by appending a closing brace
+                                    try:
+                                        repaired = text.rstrip() + "\n}\n"
+                                        return JSONResponse(json.loads(repaired))
+                                    except Exception:
+                                        # Return raw content so frontend can at least render text
+                                        return Response(content=text, media_type="application/json")
+                        except Exception:
+                            return JSONResponse({}, status_code=500)
+                    return JSONResponse({}, status_code=404)
+
+                # Excel download endpoint removed for now
 
                 fastapi_app.include_router(router)
         except Exception:
