@@ -420,9 +420,9 @@ async function startResultsFlow(){
   if(reload){ reload.onclick = ()=>{ loadResultsAfterDelay(0); }; }
   // reset state
   err.style.display='none'; actions.style.display='none'; pre.style.display='none'; loader.style.display='flex';
-  loadResultsAfterDelay(20);
+  loadResultsAfterDelay(25);
   // Also schedule AI Insight generation ~20s after opening Results
-  try { scheduleAISummary(20); } catch(_) {}
+  try { scheduleAISummary(25); } catch(_) {}
 }
 
 function loadResultsAfterDelay(seconds){
