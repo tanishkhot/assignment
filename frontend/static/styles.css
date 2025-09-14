@@ -196,4 +196,24 @@ input[type="text"], input[type="password"], select { width: 100%; padding: 0.5re
 .results-pre { background: #0b1220; color: #e5e7eb; padding: 1rem; border-radius: 0.5rem; max-height: 420px; overflow: auto; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 12px; border: 1px solid var(--border-color); }
 .results-loader { display: flex; align-items: center; gap: 10px; padding: 0.75rem; color: var(--secondary-color); }
 .spinner-rolling { width: 18px; height: 18px; border: 2px solid #d1d5db; border-top-color: var(--primary-color); border-radius: 50%; animation: spin 0.8s linear infinite; }
-.results-actions { margin-top: 0.75rem; display: flex; }
+.results-actions { margin-top: 0.75rem; display: flex; flex-direction: column; gap: 8px; }
+.results-actions .actions-row { display: flex; align-items: center; gap: 8px; justify-content: flex-start; width: 100%; }
+.results-actions .actions-row-primary { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.results-actions .actions-row-secondary { flex-wrap: wrap; justify-content: space-between; }
+.results-actions .actions-row > * { white-space: nowrap; }
+.results-actions .model-select { display: inline-flex; align-items: center; gap: 6px; }
+.results-actions .model-select select { padding: 6px 8px; height: 34px; border: 1px solid var(--border-color); border-radius: 6px; }
+.results-actions .actions-left { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.results-actions .actions-right { margin-left: auto; }
+.results-actions .actions-warning { color: #b45309; }
+
+/* Ensure sections stack vertically and occupy full width */
+#resultsPanel, #mermaidPanel, #erPanel {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  flex: 0 0 100%;
+  align-self: stretch;
+}
+#resultsPanel { margin-bottom: 8px; }
+#mermaidPanel, #erPanel { clear: both; margin-top: 8px; }

@@ -1451,6 +1451,7 @@ source = { editable = "." }
 dependencies = [
     { name = "atlan-application-sdk", extra = ["daft", "sqlalchemy", "workflows"] },
     { name = "boto3" },
+    { name = "httpx" },
     { name = "openpyxl" },
     { name = "pandas" },
     { name = "poethepoet" },
@@ -1469,6 +1470,7 @@ dev = [
 requires-dist = [
     { name = "atlan-application-sdk", extras = ["daft", "sqlalchemy", "workflows"], specifier = ">=0.1.1rc41" },
     { name = "boto3", specifier = ">=1.38.6" },
+    { name = "httpx", specifier = ">=0.27.2" },
     { name = "openpyxl", specifier = ">=3.1.2" },
     { name = "pandas", specifier = ">=2.2.3" },
     { name = "poethepoet", specifier = ">=0.34.0" },
