@@ -421,6 +421,8 @@ async function startResultsFlow(){
   // reset state
   err.style.display='none'; actions.style.display='none'; pre.style.display='none'; loader.style.display='flex';
   loadResultsAfterDelay(20);
+  // Also schedule AI Insight generation ~20s after opening Results
+  try { scheduleAISummary(20); } catch(_) {}
 }
 
 function loadResultsAfterDelay(seconds){
@@ -656,6 +658,46 @@ function renderSummary(summary){
     else { body.innerHTML = `<pre class="results-pre" style="margin:0; max-height:240px;">${lines.join('\n')}</pre>`; }
     wrap.style.display = 'block';
   } catch(_){ }
+}
+
+// --- AI Insight (auto) ---
+let aiTimer = null;
+function scheduleAISummary(delaySeconds){
+  if (aiTimer) { clearTimeout(aiTimer); aiTimer = null; }
+  const d = Number(delaySeconds)||0;
+  aiTimer = setTimeout(()=>{ generateAISummary(); }, Math.max(0, d)*1000);
+}
+
+async function generateAISummary(){
+  const panel = document.getElementById('aiInsightPanel');
+  const loader = document.getElementById('aiInsightLoader');
+  const err = document.getElementById('aiInsightError');
+  const pre = document.getElementById('aiInsightContent');
+  try{
+    if (panel) panel.style.display = 'block';
+    if (loader) loader.style.display = 'flex';
+    if (err) { err.style.display = 'none'; err.textContent = ''; }
+    if (pre) pre.style.display = 'none';
+    const wf = await ensureWorkflowId();
+    if (!wf) throw new Error('Workflow id unavailable');
+    const res = await fetch(`/workflows/v1/ai-summary/${wf}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: getSelectedModel(), candidates: getCandidateModels() }),
+    });
+    if (!res.ok){
+      const txt = await res.text();
+      throw new Error(`Failed to generate insight (${res.status}): ${txt}`);
+    }
+    const data = await res.json();
+    const text = (data && data.summary) || '';
+    if (!text) throw new Error('Empty insight');
+    if (pre){ pre.textContent = text; pre.style.display='block'; }
+    if (loader) loader.style.display='none';
+  } catch(e){
+    if (loader) loader.style.display='none';
+    if (err){ err.textContent = (e && e.message) || 'Failed to generate insight.'; err.style.display='block'; }
+  }
 }
 
 // --- Lineage Diagram (Groq -> Mermaid) ---

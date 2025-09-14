@@ -297,6 +297,219 @@ async def main():
                         "mermaid": mermaid_code,
                     })
 
+                # --- AI Insight: metadata-specific summary (plain text) ---
+                @router.post("/workflows/v1/ai-summary/{workflow_id}")  # type: ignore
+                async def ai_summary(
+                    workflow_id: str,
+                    model: str = Body(default="gemma2-9b-it"),
+                    max_chars: int = Body(default=160000),
+                    candidates: list[str] | None = Body(default=None),
+                ):
+                    import httpx
+                    import json
+                    import re
+
+                    groq_api_key = os.getenv("GROQ_API_KEY", "").strip()
+                    if not groq_api_key:
+                        return JSONResponse({"error": "GROQ_API_KEY not configured on server"}, status_code=400)
+
+                    # Prefer structured JSON if available
+                    json_path = os.path.join(outputs_dir, workflow_id, "output.json")
+                    txt_path = os.path.join(outputs_dir, workflow_id, "output.txt")
+
+                    output_json = None
+                    if os.path.exists(json_path):
+                        try:
+                            with open(json_path, "r", encoding="utf-8") as f:
+                                output_json = json.load(f)
+                        except Exception:
+                            output_json = None
+
+                    output_text = ""
+                    if os.path.exists(txt_path):
+                        try:
+                            with open(txt_path, "r", encoding="utf-8", errors="ignore") as f:
+                                output_text = f.read()
+                        except Exception:
+                            output_text = ""
+                    if not output_json and not output_text:
+                        return JSONResponse({"error": "no outputs found"}, status_code=404)
+
+                    # Build a compact ASSETS context from structured JSON (preferred)
+                    def safe_list(key: str) -> list:
+                        v = []
+                        if isinstance(output_json, dict) and key in output_json and isinstance(output_json[key], list):
+                            v = output_json[key]
+                        return v
+
+                    assets_lines: list[str] = []
+                    if output_json:
+                        # Collect top tables
+                        tables = []
+                        for it in safe_list("table")[:30]:
+                            sch = it.get("table_schema") or it.get("schema_name")
+                            tbl = it.get("table_name")
+                            if sch and tbl:
+                                tables.append(f"{sch}.{tbl}")
+                        if tables:
+                            assets_lines.append("Tables: " + ", ".join(sorted(set(tables))[:20]))
+
+                        # Relationships (edges)
+                        rels = []
+                        for it in safe_list("relationship")[:60]:
+                            sc = it.get("src_schema_name") or it.get("table_schema")
+                            st = it.get("src_table_name") or it.get("table_name")
+                            scc = it.get("src_column_name")
+                            dc = it.get("dst_schema_name")
+                            dt = it.get("dst_table_name")
+                            dcc = it.get("dst_column_name")
+                            if sc and st and scc and dc and dt and dcc:
+                                rels.append(f"{sc}.{st}.{scc} -> {dc}.{dt}.{dcc}")
+                        if rels:
+                            assets_lines.append("FKs: " + ", ".join(rels[:20]))
+
+                        # View deps (table -> view)
+                        vdeps = []
+                        for it in safe_list("view_dependency")[:40]:
+                            sc = it.get("src_schema_name")
+                            st = it.get("src_table_name")
+                            dc = it.get("dst_schema_name")
+                            dt = it.get("dst_table_name")
+                            if sc and st and dc and dt:
+                                vdeps.append(f"{sc}.{st} -> {dc}.{dt}")
+                        if vdeps:
+                            assets_lines.append("Views: " + ", ".join(vdeps[:15]))
+
+                        # Quality metrics
+                        qms = []
+                        for it in safe_list("quality_metric")[:40]:
+                            sc = it.get("schema_name")
+                            st = it.get("table_name")
+                            col = it.get("column_name")
+                            nf = it.get("null_frac")
+                            nd = it.get("distinct_count_estimated") or it.get("n_distinct_raw")
+                            if sc and st and col:
+                                metric = f"{sc}.{st}.{col}"
+                                extras = []
+                                if nf is not None:
+                                    try:
+                                        extras.append(f"null%~{round(float(nf)*100,1)}")
+                                    except Exception:
+                                        pass
+                                if nd is not None:
+                                    extras.append(f"distinct~{nd}")
+                                if extras:
+                                    metric += " (" + ", ".join(map(str, extras[:2])) + ")"
+                                qms.append(metric)
+                        if qms:
+                            assets_lines.append("Quality: " + ", ".join(qms[:15]))
+
+                        # Indexes
+                        idxs = []
+                        for it in safe_list("index")[:40]:
+                            sc = it.get("schema_name")
+                            st = it.get("table_name")
+                            ix = it.get("index_name")
+                            if sc and st and ix:
+                                idxs.append(f"{sc}.{st}:{ix}")
+                        if idxs:
+                            assets_lines.append("Indexes: " + ", ".join(idxs[:15]))
+
+                    if not assets_lines and output_text:
+                        # Fallback: heuristics over text sections
+                        tbls = re.findall(r"^\s*(?:===\s*TABLES?\s*===|TABLE)\s*|^(?!===).*?\b([a-zA-Z0-9_]+)\s*$", output_text, re.MULTILINE)
+                        if tbls:
+                            assets_lines.append("Tables: " + ", ".join(list(dict.fromkeys(tbls))[:20]))
+
+                    # Build a dataset-specific prompt
+                    ASSETS = "\n".join(assets_lines[:6])
+                    system_prompt = (
+                        "You are a senior data engineer and AI practitioner. "
+                        "Write a dataset-specific, practical summary of how THIS metadata can be used. "
+                        "Refer to the given ASSETS by name (tables, schemas, relations, metrics). Do not invent names.\n\n"
+                        "Output format (strict):\n"
+                        "<INSIGHT>\n"
+                        "- bullet 1\n"
+                        "- bullet 2\n"
+                        "...\n"
+                        "</INSIGHT>\n\n"
+                        "Rules:\n"
+                        "- 6–10 bullets max, each 'thing -> use' (e.g., schema.table -> feature sourcing for model X).\n"
+                        "- Mention at least 3 concrete assets from ASSETS (e.g., schemas/tables/relations) and one quality metric/index.\n"
+                        "- Cover discovery/governance, lineage impact analysis, feature & label sourcing, data quality & drift monitoring, PII/compliance, troubleshooting.\n"
+                        "- Plain text bullets only; no code blocks, headers, or links.\n"
+                        "- Keep under ~1200 characters."
+                    )
+
+                    user_prompt = (
+                        "ASSETS:\n" + (ASSETS or "(no structured list)") + "\n\n"
+                        "If needed, you may also use the raw export below to ground references.\n\n"
+                        + ("EXPORT_TEXT_BEGIN\n" + (output_text[:max_chars] if output_text else "") + "\nEXPORT_TEXT_END\n")
+                    )
+
+                    messages = [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ]
+                    model_list = candidates or [model]
+                    used_model = None
+                    content = ""
+                    try:
+                        async with httpx.AsyncClient(timeout=60) as client:
+                            last_err_text = None
+                            last_status = None
+                            for m in model_list:
+                                resp = await client.post(
+                                    "https://api.groq.com/openai/v1/chat/completions",
+                                    headers={
+                                        "Authorization": f"Bearer {groq_api_key}",
+                                        "Content-Type": "application/json",
+                                    },
+                                    json={"model": m, "temperature": 0.2, "max_tokens": 700, "messages": messages},
+                                )
+                                if resp.status_code == 200:
+                                    data = resp.json()
+                                    content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                                    used_model = m
+                                    break
+                                last_err_text = resp.text
+                                last_status = resp.status_code
+                                if resp.status_code not in (429, 500, 502, 503):
+                                    break
+                            else:
+                                return JSONResponse({"error": f"groq error {last_status}", "details": last_err_text}, status_code=502)
+                    except Exception as e:
+                        return JSONResponse({"error": "request failed", "details": str(e)}, status_code=502)
+
+                    # Extract between <INSIGHT> markers; sanitize to bullets only
+                    summary = content or ""
+                    m = re.search(r"<INSIGHT>\s*([\s\S]*?)\s*</INSIGHT>", summary, re.IGNORECASE)
+                    if m:
+                        summary = m.group(1)
+                    # Keep only lines starting with '-' and trim
+                    lines = []
+                    for ln in summary.splitlines():
+                        ln2 = ln.strip()
+                        if ln2.startswith("- "):
+                            lines.append(ln2)
+                    if not lines:
+                        # fallback: take first 10 non-empty lines
+                        for ln in summary.splitlines():
+                            ln2 = ln.strip()
+                            if ln2:
+                                lines.append("- " + ln2)
+                            if len(lines) >= 10:
+                                break
+                    summary_out = "\n".join(lines[:10])
+                    if len(summary_out) > 1400:
+                        summary_out = summary_out[:1400].rstrip() + "…"
+
+                    return JSONResponse({
+                        "workflow_id": workflow_id,
+                        "model": used_model or model,
+                        "summary": summary_out,
+                    })
+
                 # --- ER diagram generation via Groq (Mermaid erDiagram) ---
                 @router.post("/workflows/v1/er-mermaid/{workflow_id}")  # type: ignore
                 async def er_mermaid(

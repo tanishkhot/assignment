@@ -243,7 +243,7 @@ uv run main.py                   # run the app server
 uv run poe stop-deps             # kill common ports if needed
 ```
 
-## Credentials Helper (Reviewer UX)
+## Credentials Helper
 
 - On the first screen there’s a button “Get the credentials” - it redirects to a Google Doc.
 - Values: a Google Doc with the following sections:

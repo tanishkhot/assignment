@@ -357,6 +357,16 @@
                 <div style="font-weight:600; margin-bottom:6px;">Summary</div>
                 <div id="resultsSummaryBody" class="hint">No summary available yet.</div>
               </div>
+              <!-- AI Insight panel (auto-generated) placed directly under Summary -->
+              <div id="aiInsightPanel" class="card" style="margin-top:8px; padding:0.75rem; display:none;">
+                <div style="font-weight:600; margin-bottom:6px;">AI Insight</div>
+                <div id="aiInsightLoader" class="results-loader" style="display:flex;">
+                  <div class="spinner-rolling"></div>
+                  <div>Preparing a short dataset-specific summary…</div>
+                </div>
+                <div id="aiInsightError" class="error-message" style="display:none;"></div>
+                <pre id="aiInsightContent" class="results-pre" style="display:none; white-space:pre-wrap;"></pre>
+              </div>
               <div id="resultsActions" class="results-actions" style="display:none; gap:8px;">
                 <div class="actions-row actions-row-primary">
                   <button id="reloadResults" class="btn btn-secondary">Try Again</button>
@@ -407,6 +417,8 @@
               <div id="erContainer" class="mermaid" style="margin-top:8px; overflow:auto;"></div>
             </div>
 
+            
+
             <div class="bottom-bar">
               <div id="page4-nav" class="nav-buttons">
                 <button onclick="previousPage()" class="btn btn-secondary">Previous</button>
@@ -440,7 +452,7 @@
         </div>
       </div>
     </div>
-    <script src="script.js?v=3"></script>
+    <script src="script.js?v=5"></script>
     <script>
       // Dismiss landing overlay to reveal the app underneath
       (function(){
