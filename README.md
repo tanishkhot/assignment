@@ -71,6 +71,7 @@ Endpoints live under: http://localhost:3000/workflows/v1
 - Lineage: foreign keys + view dependencies
 - Outputs: unified text export, JSON export, resilient summary
 - Results page: JSON/Text toggle, “latest output” discovery, summary panel
+- AI diagrams: one‑click Mermaid lineage + ER diagrams (Groq), model selector with fallbacks
 
 ## System Design
 
@@ -283,18 +284,76 @@ uv run main.py                   # run the app server
 uv run poe stop-deps             # kill common ports if needed
 ```
 
+## Credentials Helper (Reviewer UX)
+
+- On the first screen there’s a button “Get the credentials” - it redirects to a Google Doc.
+- Values: a Google Doc with the following sections:
+  - Groq: API key (bearer token) - To be pasted in .env
+  - NeonDB/Postgres: host, port, database, username, password, sslmode=require (For the main assignment)
+
+This button only opens the document; nothing is read automatically from it.
+
+## Groq Setup (LLM)
+
+- Set your Groq key in the server environment:
+
+```bash
+echo 'GROQ_API_KEY=your_key_here' >> .env
+```
+
+- Start the app normally. If the key is not set, diagram endpoints will return `400 GROQ_API_KEY not configured`.
+
+Optional frontend tweaks:
+- Model list (ordered fallbacks) can be edited in `frontend/static/index.html` under `window.env.LLM_MODELS`.
+  - Default: `llama-3.1-8b-instant,llama-3.1-70b-versatile,mixtral-8x7b-32768,gemma2-9b-it`.
+
+## Generating Diagrams (Mermaid)
+
+1) Run an extraction (auth → connection → filters → Run) and go to Results.
+2) In “Results” actions, choose a model in the “Model” dropdown (defaults provided).
+3) Click:
+   - “Generate Lineage Diagram” for FK + view‑dependency flowchart, or
+   - “Generate ER Diagram” for a compact ER view.
+4) A diagram panel appears below Results. Use “Copy Mermaid” to copy the source.
+
+Notes:
+- The UI renders Mermaid client‑side.
+- "Warning: AI‑generated diagrams are experimental.”
+
+## How Diagrams Are Built (Server‑side)
+
+- Lineage endpoint: `POST /workflows/v1/lineage-mermaid/{workflow_id}`
+  - Reads `output/<id>/output.txt`, prompts Groq to produce a simple flowchart.
+  - Server sanitizes and rebuilds a compact `flowchart LR` with up to 20 edges.
+- ER endpoint: `POST /workflows/v1/er-mermaid/{workflow_id}`
+  - Reads `output/<id>/output.txt`, prompts Groq for Mermaid `erDiagram`.
+  - Server sanitizes and rebuilds a compact `erDiagram` with up to 8 relations.
+- Model selection and fallback:
+  - Frontend sends `{model, candidates}`.
+  - Server automatically retries candidates on 429/5xx until success.
+
+## Reviewer Flow (End‑to‑End)
+
+1) Open the UI and click “Get the credentials” to retrieve Groq + NeonDB creds.
+2) Fill Connection (host/port/db/user/pass); keep SSL mode `require` for Neon.
+3) Test Connection → Next → pick a connection name.
+4) Choose include/exclude filters → Preflight “Check” → “Run”.
+5) Go to Results → switch JSON/Text view if needed.
+6) Choose a model → “Generate Lineage Diagram” or “Generate ER Diagram”.
+
+## Troubleshooting (Diagrams)
+
+- “GROQ_API_KEY not configured”: set it in `.env` and restart.
+- “Rate limit exceeded”: pick a different model in the dropdown; server also retries fallbacks automatically.
+- “Mermaid parse error”: server sanitizes aggressively; re‑click Generate. If it persists, copy the Mermaid from the panel and share; we’ll extend the sanitizer.
+- Empty diagram: ensure an extraction finished and `output/<id>/output.txt` exists; wait a few seconds and click “Try Again”.
+
 ## Troubleshooting
 
 - “Results not ready” — wait a few seconds; the Results page polls and tries `/latest-output` and `/result-json/{id}` as fallbacks
 - Empty sections — verify include filters match your database/schemas
 - Port conflicts — use `uv run poe stop-deps`
 - JSON parse errors — the app writes outputs atomically and the result endpoint repairs transient partial reads (should be rare)
-<!-- 
-## Roadmap (Short)
-
-- Optional: expanded quality metrics roll‑up in summary
-- Optional: richer schema stats, sampling, and insights
-- Optional: export options (CSV/Excel) revisited later -->
 
 ## License
 

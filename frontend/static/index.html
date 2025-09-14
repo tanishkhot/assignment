@@ -22,7 +22,13 @@
       sizes="16x16"
       href="https://atlan.com/favicon-16x16.png"
     />
-    <link rel="stylesheet" href="styles.css?v=2" />
+    <link rel="stylesheet" href="styles.css?v=3" />
+    <!-- Mermaid for client-side diagram rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <script>
+      // Initialize Mermaid but don't auto-scan the whole page
+      if (window.mermaid) { try { mermaid.initialize({ startOnLoad: false, theme: 'default' }); } catch(_){} }
+    </script>
     <style>
       /* Landing hero overlay (isolated styles, no impact on app) */
       #landing-hero { position: fixed; inset: 0; z-index: 9999; display: grid; place-items: center; background:
@@ -55,6 +61,11 @@
         APP_NAME: "postgres",
         TEMPORAL_UI_HOST: location.hostname,
         TEMPORAL_UI_PORT: "8233",
+        // Optional: shared Google Doc URL for credentials
+        // Example: "https://docs.google.com/document/d/XXXXXX/edit"
+        CREDS_DOC_URL: "https://docs.google.com/document/d/1XSHt6ZqrX2BufmzgbXA5I0K1bLpkPFGUfSAOYImq-gg/edit?usp=sharing",
+        // Ordered candidate models for Groq; customize as needed
+        LLM_MODELS: "llama-3.1-8b-instant,llama-3.1-70b-versatile,mixtral-8x7b-32768,gemma2-9b-it",
       };
     </script>
 
@@ -127,6 +138,12 @@
                 </button>
               </div>
             </div>
+            <div class="form-group" style="display:flex; align-items:center; gap:8px;">
+              <a id="getCredsLink" class="btn btn-outline" href="#" target="_blank" rel="noopener noreferrer">
+                Get the credentials
+              </a>
+              <span class="hint">Opens the shared Google Doc</span>
+            </div>
             <div class="form-group horizontal">
               <div class="input-wrapper flex-grow">
                 <label>Host *</label>
@@ -182,7 +199,7 @@
                 <span
                   class="help-icon"
                   title="You need SSL for: Neon, AWS RDS, Cloud SQL. Use require for most cases; use verify-ca/verify-full when you must verify the server certificate with your own CA."
-                  >ℹ️</span
+                  ></span
                 ></label
               >
               <select id="sslmode">
@@ -340,12 +357,53 @@
                 <div id="resultsSummaryBody" class="hint">No summary available yet.</div>
               </div>
               <div id="resultsActions" class="results-actions" style="display:none; gap:8px;">
-                <button id="reloadResults" class="btn btn-secondary">Try Again</button>
-                <a id="openRawFile" href="#" target="_blank" class="btn btn-outline">Open JSON</a>
-                <a id="openSummary" href="#" target="_blank" class="btn btn-outline">Open Summary</a>
-                <a id="openDashboard" href="#" target="_blank" class="btn btn-primary">Go to Dashboard</a>
+                <div class="actions-row actions-row-primary">
+                  <button id="reloadResults" class="btn btn-secondary">Try Again</button>
+                  <a id="openRawFile" href="#" target="_blank" class="btn btn-outline">Open JSON</a>
+                  <a id="openSummary" href="#" target="_blank" class="btn btn-outline">Open Summary</a>
+                  <a id="openDashboard" href="#" target="_blank" class="btn btn-primary">Go to Dashboard</a>
+                </div>
+                <div class="actions-row actions-row-secondary">
+                  <div class="actions-left">
+                    <label for="llmModelSelect" class="hint model-select">
+                      Model
+                      <select id="llmModelSelect"></select>
+                    </label>
+                    <button id="generateLineage" class="btn btn-outline" title="Use Groq to produce a Mermaid lineage diagram">Generate Lineage Diagram</button>
+                    <button id="generateER" class="btn btn-outline" title="Use Groq to produce a Mermaid ER diagram">Generate ER Diagram</button>
+                  </div>
+                  <div class="actions-right">
+                    <span class="hint actions-warning" title="LLM output may be inaccurate.">AI‑generated diagrams are experimental</span>
+                  </div>
+                </div>
               </div>
               <div id="resultsError" class="error-message" style="display:none;"></div>
+            </div>
+
+            <!-- Mermaid diagram panel -->
+            <div id="mermaidPanel" class="card" style="margin-top:8px; padding:0.75rem; display:none;">
+              <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px;">
+                <div style="font-weight:600;">Lineage Diagram</div>
+                <div style="display:flex; gap:8px;">
+                  <button id="copyMermaidBtn" class="btn btn-secondary" title="Copy Mermaid source">Copy Mermaid</button>
+                </div>
+              </div>
+              <div id="mermaidStatus" class="hint">Click Generate to create a diagram.</div>
+              <div id="mermaidError" class="error-message" style="display:none;"></div>
+              <div id="mermaidContainer" class="mermaid" style="margin-top:8px; overflow:auto;"></div>
+            </div>
+
+            <!-- ER diagram panel -->
+            <div id="erPanel" class="card" style="margin-top:8px; padding:0.75rem; display:none;">
+              <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px;">
+                <div style="font-weight:600;">ER Diagram</div>
+                <div style="display:flex; gap:8px;">
+                  <button id="copyERMermaidBtn" class="btn btn-secondary" title="Copy Mermaid ER source">Copy Mermaid</button>
+                </div>
+              </div>
+              <div id="erStatus" class="hint">Click Generate to create an ER diagram.</div>
+              <div id="erError" class="error-message" style="display:none;"></div>
+              <div id="erContainer" class="mermaid" style="margin-top:8px; overflow:auto;"></div>
             </div>
 
             <div class="bottom-bar">
@@ -381,7 +439,7 @@
         </div>
       </div>
     </div>
-    <script src="script.js?v=2"></script>
+    <script src="script.js?v=3"></script>
     <script>
       // Dismiss landing overlay to reveal the app underneath
       (function(){

@@ -11,6 +11,51 @@ let lastWorkflowId = sessionStorage.getItem('lastWorkflowId') || null;
 let resultsTimer = null;
 let resultsPoller = null;
 let resultsViewMode = (localStorage.getItem('resultsViewMode') || 'json');
+let lastMermaidSource = '';
+let lastERMermaidSource = '';
+let modelCandidates = [];
+
+function parseEnvModels(){
+  const raw = (window.env && window.env.LLM_MODELS) || '';
+  const def = [
+    'llama-3.1-8b-instant',
+    'llama-3.1-70b-versatile',
+    'mixtral-8x7b-32768',
+    'gemma2-9b-it',
+  ];
+  const list = raw.split(',').map(s=>s.trim()).filter(Boolean);
+  return list.length ? list : def;
+}
+
+function populateModelSelect(){
+  modelCandidates = parseEnvModels();
+  const sel = document.getElementById('llmModelSelect');
+  if (!sel) return;
+  sel.innerHTML = '';
+  const chosen = localStorage.getItem('diagramModel') || modelCandidates[0];
+  modelCandidates.forEach(m => {
+    const opt = document.createElement('option');
+    opt.value = m; opt.textContent = m;
+    if (m === chosen) opt.selected = true;
+    sel.appendChild(opt);
+  });
+  sel.addEventListener('change', ()=>{
+    localStorage.setItem('diagramModel', sel.value);
+  });
+}
+
+function getSelectedModel(){
+  const sel = document.getElementById('llmModelSelect');
+  return (sel && sel.value) || (modelCandidates[0] || 'llama-3.1-8b-instant');
+}
+
+function getCandidateModels(){
+  const selected = getSelectedModel();
+  const list = [...(modelCandidates && modelCandidates.length ? modelCandidates : parseEnvModels())];
+  // Move selected to front.
+  const rest = list.filter(m => m !== selected);
+  return [selected, ...rest];
+}
 
 function goToPage(n){
   dlog('goToPage', { n, auth: !!sessionStorage.getItem('authenticationComplete'), lastWorkflowId: sessionStorage.getItem('lastWorkflowId') });
@@ -483,6 +528,16 @@ function loadResultsAfterDelay(seconds){
 
 document.addEventListener('DOMContentLoaded', ()=>{
   dlog('DOMContentLoaded');
+  // Wire up external credentials link if provided
+  try {
+    const link = document.getElementById('getCredsLink');
+    if (link) {
+      const url = (window.env && window.env.CREDS_DOC_URL) || 'https://docs.google.com/document/d/YOUR_DOC_ID_HERE/edit';
+      link.href = url;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+    }
+  } catch(_) { /* no-op */ }
   // Make step 4 explicitly launch the results flow so the loader is shown even if guards would block a plain nav
   document.querySelectorAll('.step').forEach(step=>{
     step.addEventListener('click',()=>{
@@ -500,6 +555,18 @@ document.addEventListener('DOMContentLoaded', ()=>{
   attachPasswordToggle();
   setupPreflight();
   handleRunWorkflow();
+  // Populate LLM selector
+  populateModelSelect();
+  // Lineage diagram actions
+  const genBtn = document.getElementById('generateLineage');
+  if (genBtn){ genBtn.addEventListener('click', ()=> generateLineageDiagram()); }
+  const copyBtn = document.getElementById('copyMermaidBtn');
+  if (copyBtn){ copyBtn.addEventListener('click', ()=> copyMermaidSource()); }
+  // ER diagram actions
+  const genER = document.getElementById('generateER');
+  if (genER){ genER.addEventListener('click', ()=> generateERDiagram()); }
+  const copyER = document.getElementById('copyERMermaidBtn');
+  if (copyER){ copyER.addEventListener('click', ()=> copyERMermaidSource()); }
   // Inline results button state
   const inlineBtn = document.getElementById('goToResultsInline');
   if (inlineBtn){
@@ -589,4 +656,118 @@ function renderSummary(summary){
     else { body.innerHTML = `<pre class="results-pre" style="margin:0; max-height:240px;">${lines.join('\n')}</pre>`; }
     wrap.style.display = 'block';
   } catch(_){ }
+}
+
+// --- Lineage Diagram (Groq -> Mermaid) ---
+async function ensureWorkflowId(){
+  if (lastWorkflowId) return lastWorkflowId;
+  try{
+    const resp = await fetch('/workflows/v1/latest-output', { cache: 'no-store' });
+    if (resp.ok){ const js = await resp.json(); if (js && js.workflow_id){ lastWorkflowId = js.workflow_id; sessionStorage.setItem('lastWorkflowId', lastWorkflowId); return lastWorkflowId; } }
+  }catch(_){ }
+  return null;
+}
+
+async function generateLineageDiagram(){
+  const panel = document.getElementById('mermaidPanel');
+  const status = document.getElementById('mermaidStatus');
+  const err = document.getElementById('mermaidError');
+  const container = document.getElementById('mermaidContainer');
+  if (panel) panel.style.display = 'block';
+  if (err) { err.style.display = 'none'; err.textContent=''; }
+  if (container) container.innerHTML = '';
+  if (status) status.textContent = 'Generating diagram via Groq…';
+
+  const wf = await ensureWorkflowId();
+  if (!wf){ if (status) status.textContent = 'No workflow id available yet.'; return; }
+
+  try{
+    const res = await fetch(`/workflows/v1/lineage-mermaid/${wf}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: getSelectedModel(), candidates: getCandidateModels() }),
+    });
+    if (!res.ok){
+      const txt = await res.text();
+      throw new Error(`Failed to generate diagram (${res.status}): ${txt}`);
+    }
+    const data = await res.json();
+    const code = (data && data.mermaid) || '';
+    lastMermaidSource = code;
+    if (!code){ throw new Error('Empty Mermaid code received'); }
+    await renderMermaid(code, container);
+    if (status) status.textContent = 'Diagram generated.';
+  } catch(e){
+    if (status) status.textContent = '';
+    if (err){ err.textContent = e.message || 'Failed to generate diagram.'; err.style.display = 'block'; }
+  }
+}
+
+async function renderMermaid(code, container){
+  if (!container) return;
+  if (!window.mermaid){ container.textContent = code; return; }
+  try{
+    const id = 'lineageDiagram_' + Math.random().toString(36).slice(2);
+    const { svg } = await window.mermaid.render(id, code);
+    container.innerHTML = svg;
+  } catch(e){
+    // Fallback: text block
+    container.textContent = code;
+    throw e;
+  }
+}
+
+async function copyMermaidSource(){
+  if (!lastMermaidSource){ return; }
+  try {
+    await navigator.clipboard.writeText(lastMermaidSource);
+    alert('Mermaid source copied to clipboard');
+  } catch(_){
+    // no-op
+  }
+}
+
+async function generateERDiagram(){
+  const panel = document.getElementById('erPanel');
+  const status = document.getElementById('erStatus');
+  const err = document.getElementById('erError');
+  const container = document.getElementById('erContainer');
+  if (panel) panel.style.display = 'block';
+  if (err) { err.style.display = 'none'; err.textContent=''; }
+  if (container) container.innerHTML = '';
+  if (status) status.textContent = 'Generating ER diagram via Groq…';
+
+  const wf = await ensureWorkflowId();
+  if (!wf){ if (status) status.textContent = 'No workflow id available yet.'; return; }
+
+  try{
+    const res = await fetch(`/workflows/v1/er-mermaid/${wf}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: getSelectedModel(), candidates: getCandidateModels() }),
+    });
+    if (!res.ok){
+      const txt = await res.text();
+      throw new Error(`Failed to generate ER diagram (${res.status}): ${txt}`);
+    }
+    const data = await res.json();
+    const code = (data && data.mermaid) || '';
+    lastERMermaidSource = code;
+    if (!code){ throw new Error('Empty Mermaid code received'); }
+    await renderMermaid(code, container);
+    if (status) status.textContent = 'ER diagram generated.';
+  } catch(e){
+    if (status) status.textContent = '';
+    if (err){ err.textContent = e.message || 'Failed to generate ER diagram.'; err.style.display = 'block'; }
+  }
+}
+
+async function copyERMermaidSource(){
+  if (!lastERMermaidSource){ return; }
+  try {
+    await navigator.clipboard.writeText(lastERMermaidSource);
+    alert('ER Mermaid source copied to clipboard');
+  } catch(_){
+    // no-op
+  }
 }
