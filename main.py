@@ -304,6 +304,7 @@ async def main():
                     model: str = Body(default="llama-3.1-8b-instant"),
                     max_chars: int = Body(default=120000),
                     candidates: list[str] | None = Body(default=None),
+                    detail: str = Body(default="rich"),
                 ):
                     import json
                     import re
@@ -389,7 +390,7 @@ async def main():
                         return JSONResponse({"error": "request failed", "details": str(e)}, status_code=502)
 
                     # Extract and sanitize Mermaid ER code
-                    def _sanitize_er(text: str) -> str:
+                    def _sanitize_er(text: str, detail_level: str) -> str:
                         code = text or ""
                         # Extract inside markers if present
                         m = re.search(r"<MERMAID>\s*([\s\S]*?)\s*</MERMAID>", code, re.IGNORECASE)
@@ -416,8 +417,9 @@ async def main():
                         )
                         pairs: list[tuple[str, str, str]] = []
                         seen: set[tuple[str, str]] = set()
+                        max_pairs = 8 if detail_level == "minimal" else (20 if detail_level == "standard" else 40)
                         for match in rel_pat.finditer(code):
-                            left, token, right, _label = match.groups()
+                            left, token, right = match.groups()
                             if not left or not right:
                                 continue
                             if left.upper() == right.upper():
@@ -430,19 +432,19 @@ async def main():
                             if not norm:
                                 norm = "||--o{"
                             pairs.append((left, norm, right))
-                            if len(pairs) >= 8:  # tighter cap
+                            if len(pairs) >= max_pairs:
                                 break
 
                         if not pairs:
                             # last-resort minimal stub to avoid parser error
-                            return "erDiagram\nA ||--o{ B"
+                            return "erDiagram\nA ||--o{ B : rel"
 
                         out_lines = ["erDiagram"]
                         for left, token, right in pairs:
-                            out_lines.append(f"{left} {token} {right}")
+                            out_lines.append(f"{left} {token} {right} : rel")
                         return "\n".join(out_lines)
 
-                    mermaid_code = _sanitize_er(content or "")
+                    mermaid_code = _sanitize_er(content or "", detail)
 
                     return JSONResponse({
                         "workflow_id": workflow_id,

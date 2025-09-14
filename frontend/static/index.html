@@ -65,7 +65,8 @@
         // Example: "https://docs.google.com/document/d/XXXXXX/edit"
         CREDS_DOC_URL: "https://docs.google.com/document/d/1XSHt6ZqrX2BufmzgbXA5I0K1bLpkPFGUfSAOYImq-gg/edit?usp=sharing",
         // Ordered candidate models for Groq; customize as needed
-        LLM_MODELS: "llama-3.1-8b-instant,llama-3.1-70b-versatile,mixtral-8x7b-32768,gemma2-9b-it",
+        // Default to gemma2-9b-it (good results), with a small fallback
+        LLM_MODELS: "gemma2-9b-it,llama-3.1-8b-instant",
       };
     </script>
 

@@ -2,7 +2,7 @@
 
 # SourceSense — Postgres Metadata Extraction (Atlan SDK)
 
-Explore and export Postgres metadata with a clean, reliable developer experience. Built on the Atlan Application SDK (Temporal + Dapr)!
+Explore and export Postgres metadata with a clean, reliable developer experience. Built on the Atlan Application SDK (Temporal + Dapr).
 
 </div>
 
@@ -13,6 +13,19 @@ This is a focused assignment implementation for a backend engineering role. It s
 - A small, robust service that extracts Postgres metadata (db/schema/table/column) and lineage (FK + view dependencies)
 - A pragmatic UI for auth, filters, preflight checks, and a Results view with JSON/Text toggle
 - Thoughtful reliability hardening (atomic outputs, resilient summary, consistent endpoints)
+
+
+## Checklist
+
+- [x] Connection form with URL parser & password toggle  
+- [x] Include/exclude filters with cross-validation  
+- [x] Preflight checks (db/schema/tables/version)  
+- [x] Extraction (db/schema/table/column)  
+- [x] Lineage (FK + view dependencies)  
+- [x] Outputs: text + JSON + summary  
+- [x] Results page with JSON/Text toggle  
+- [x] AI-generated ER/lineage diagrams (Experimental)
+- [x] Metadata metrics
 
 ## At a Glance
 
@@ -27,14 +40,15 @@ This is a focused assignment implementation for a backend engineering role. It s
 1) Copy environment defaults and ensure Python 3.11 is active
 
 ```bash
-cp .env.example .env
+cp .env.example .env  # Paste in the Groq API key in .env (if this is not done, app will be avialable on 0.0.0.0:8000)
 python --version   # should be 3.11.x
+
 ```
 
 2) Install/prepare dependencies (optional if you already have them)
 
 ```bash
-# Dapr 1.13.6
+# Dapr 1.13.6 (For macOS, other versions might work)
 brew uninstall dapr-cli || true
 brew install dapr/tap/dapr@1.13
 brew link --overwrite dapr@1.13
@@ -48,7 +62,7 @@ brew install temporal || true
 3) Start the local sidecars (Dapr + Temporal) in one terminal
 
 ```bash
-uv run poe download-components    # fetch Dapr component yamls compatible with the SDK
+uv run poe download-components    # fetch Dapr component yamls compatible with the SDK (one-time)
 uv run poe start-deps             # starts Dapr + Temporal dev server
 ```
 
@@ -58,7 +72,9 @@ uv run poe start-deps             # starts Dapr + Temporal dev server
 uv run main.py
 ```
 
-Open the UI at: http://localhost:3000/index.html
+Open the UI at: http://localhost:3000/
+(If .env is not copied):
+Open UI atL 0.0.0.0:8000/
 
 Endpoints live under: http://localhost:3000/workflows/v1
 
@@ -66,14 +82,14 @@ Endpoints live under: http://localhost:3000/workflows/v1
 
 - Clean onboarding: connection form, URL parser, password toggle
 - Smart filters: include/exclude DB+schemas with cross‑validation
-- Preflight checks: database/schema/tables/version
-- Extraction: database, schema, table, column
+- Preflight checks: database/schema/tables/version, checks them all before heavy lifting
+- Extraction: database, schema, table, column, relationships, index, quality metrics
 - Lineage: foreign keys + view dependencies
-- Outputs: unified text export, JSON export, resilient summary
-- Results page: JSON/Text toggle, “latest output” discovery, summary panel
+- Outputs: unified text export, JSON export, resilient summary (AI generated)
+- Results page: JSON/Text toggle, “latest output” discovery, summary panel 
 - AI diagrams: one‑click Mermaid lineage + ER diagrams (Groq), model selector with fallbacks
 
-## System Design
+## System Design: Simplified
 
 ```mermaid
 flowchart LR
@@ -86,119 +102,49 @@ flowchart LR
   API -->|Serve files| Outputs[/output/<workflow_id>/*/]
   UI -->|Poll| API
 ```
-<!-- 
-If Mermaid doesn’t render in your viewer, here are static diagrams you can expand inline:
 
-![System Architecture (Static)](diagrams/architecture.png)
-
-![End‑to‑End Flow (Static)](diagrams/flowchart.png)
-
-![API Surface (Static)](diagrams/apis.png)
--->
-### Detailed Flow (Mermaid, styled)
-
-```mermaid
-%%{init:{
-  "theme":"default",
-  "themeCSS": ".mermaid, svg { background-color:#ffffff !important; }"
-}}%%
-flowchart LR
-  %% --- Lanes ---
-  subgraph U["User"]
-    U1[Enter credentials & filters]
-  end
-
-  subgraph UI["Frontend (static)"]
-    UI1[POST /workflows/v1/check]
-    UI2[POST /workflows/v1/start]
-    UI3[GET /workflows/v1/latest-output]
-    UI4[GET /workflows/v1/result-json/]
-  end
-
-  subgraph API["FastAPI Server"]
-    API1[Preflight request]
-    API2[Start workflow]
-    API3["Serve outputs (JSON / text)"]
-  end
-
-  subgraph TW["Temporal Worker"]
-    TW1[Run preflight activities]
-    TW2["Fetch metadata (db/schema/table/column)"]
-    TW3["Derive lineage (FK + view deps)"]
-    TW4[Write outputs]
-  end
-
-  subgraph PG["Postgres DB"]
-    PG1[(Tables & version checks)]
-    PG2[(Metadata & lineage reads)]
-  end
-
-  subgraph OS["ObjectStore"]
-    OS1[(Raw & transformed outputs)]
-  end
-
-  %% --- Flow: Preflight ---
-  U1 --> UI1
-  UI1 --> API1
-  API1 --> TW1
-  TW1 --> PG1
-  TW1 --> API1R[Preflight result]
-  API1R --> UI1
-
-  %% --- Flow: Start & Extract ---
-  U1 --> UI2
-  UI2 --> API2
-  API2 --> TW2
-  TW2 --> PG2
-  TW2 --> TW3
-  TW3 --> PG2
-  TW3 --> TW4
-  TW4 --> OS1
-
-  %% --- Flow: Read Outputs ---
-  UI3 --> API3
-  UI4 --> API3
-  API3 --> UI3
-  API3 --> UI4
-```
-
-### Credential & Control Flow
+### Detialed System & Control Flow
 
 ```mermaid
 graph TD
     subgraph "Your Computer"
-        subgraph "Browser"
-            A[Frontend UI <br> localhost:8000]
+        subgraph "Browser (Client-Side)"
+            A[Frontend UI localhost:8000]
         end
 
         subgraph "Backend Processes"
-            B["Python Web Server <br>"]
-            C["Dapr Sidecar <br> "]
-            D["Dapr State Store <br>"]
-            E["Temporal Worker <br>"]
-            F["Temporal Server<br> localhost:8233"]
+            B["Python Web Server"]
+            C["Dapr Sidecar"]
+            D["Dapr State Store"]
+            E["Temporal Worker"]
+            F["Temporal Server localhost:8233"]
+            H["Local Storage (output/<workflow_id>)"]
         end
     end
 
     subgraph "External Service"
-        G["PostgreSQL DB <br>"]
+        G["PostgreSQL DB"]
     end
 
+    %% --- Flows ---
     A -- "1. User enters credentials & clicks 'Run'" --> B
     B -- "2. Stores credentials securely" --> C
     C -- "3. Writes to a file" --> D
-    B -- "4. Returns a 'credential_guid' (claim ticket)" --> A
-    A -- "5. Sends 'credential_guid' to start workflow" --> B
-    B -- "6. Tells Temporal to start the recipe" --> F
-    F -- "7. Assigns recipe to an available worker" --> E
-    E -- "8. Asks Dapr for credentials using 'credential_guid'" --> C
-    C -- "9. Reads credentials from file" --> D
-    D -- "10. Returns credentials" --> C
-    C -- "11. Gives credentials to worker" --> E
-    E -- "12. Connects to DB to extract metadata" --> G
+    C -- "4. Returns credential_guid" --> B
+    B -- "5. Sends 'credential_guid' to Frontend" --> A
+    A -- "6. Sends 'credential_guid' to start workflow" --> B
+    B -- "7. Tells Temporal to start the work" --> F
+    F -- "8. Assigns work to an available worker" --> E
+    E -- "9. Asks Dapr for credentials using 'credential_guid'" --> C
+    C -- "10. Reads credentials from file" --> D
+    D -- "11. Returns credentials" --> C
+    C -- "12. Gives credentials to worker" --> E
+    E -- "13. Connects to DB to extract metadata" --> G
+    E -- "14. Writes results" --> H
+    H -- "15. Results served via API" --> B
+    B -- "16. UI fetches results (JSON/Text)" --> A
 ```
-
-### Workflow Sequence
+### Swimlane (Sequence) Diagram:
 
 ```mermaid
 sequenceDiagram
@@ -226,6 +172,19 @@ sequenceDiagram
   UI->>API: GET /workflows/v1/result-json/{id}
   API-->>UI: JSON/Text output + Summary
 ```
+
+### API Surface
+
+| Method | Path                                   | Purpose                              |
+|-------:|----------------------------------------|--------------------------------------|
+| POST   | /workflows/v1/auth                     | Validate credentials                 |
+| POST   | /workflows/v1/metadata                 | List databases/schemas for filters   |
+| POST   | /workflows/v1/check                    | Preflight checks                     |
+| POST   | /workflows/v1/start                    | Start extraction workflow            |
+| GET    | /workflows/v1/latest-output            | Discover latest workflow with output |
+| GET    | /workflows/v1/result/{workflow_id}     | Text output                          |
+| GET    | /workflows/v1/result-json/{workflow_id}| JSON output                          |
+| GET    | /workflows/v1/summary/{workflow_id}    | Summary JSON                         |
 
 ## How It Works
 
@@ -305,7 +264,7 @@ echo 'GROQ_API_KEY=your_key_here' >> .env
 
 Optional frontend tweaks:
 - Model list (ordered fallbacks) can be edited in `frontend/static/index.html` under `window.env.LLM_MODELS`.
-  - Default: `llama-3.1-8b-instant,llama-3.1-70b-versatile,mixtral-8x7b-32768,gemma2-9b-it`.
+  - Default: `gemma2-9b-it,llama-3.1-8b-instant`.
 
 ## Generating Diagrams (Mermaid)
 
@@ -350,7 +309,7 @@ Notes:
 
 ## Troubleshooting
 
-- “Results not ready” — wait a few seconds; the Results page polls and tries `/latest-output` and `/result-json/{id}` as fallbacks
+- “Results not ready” — wait a few seconds; the Results page polls and tries `/latest-output` and `/result-json/{id}` as fallbacks. There is front-end side polling which polls every 5 seconds, so you can try waiting.
 - Empty sections — verify include filters match your database/schemas
 - Port conflicts — use `uv run poe stop-deps`
 - JSON parse errors — the app writes outputs atomically and the result endpoint repairs transient partial reads (should be rare)
