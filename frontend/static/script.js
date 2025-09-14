@@ -483,6 +483,16 @@ function loadResultsAfterDelay(seconds){
 
 document.addEventListener('DOMContentLoaded', ()=>{
   dlog('DOMContentLoaded');
+  // Wire up external credentials link if provided
+  try {
+    const link = document.getElementById('getCredsLink');
+    if (link) {
+      const url = (window.env && window.env.CREDS_DOC_URL) || 'https://docs.google.com/document/d/YOUR_DOC_ID_HERE/edit';
+      link.href = url;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+    }
+  } catch(_) { /* no-op */ }
   // Make step 4 explicitly launch the results flow so the loader is shown even if guards would block a plain nav
   document.querySelectorAll('.step').forEach(step=>{
     step.addEventListener('click',()=>{
